@@ -1,12 +1,25 @@
 // Usage: npm run seed
 // Adds sample data so a fresh database has something to work with.
 import pool from "../config/db.js";
+import { slugify } from "../utils/slugify.js";
 
 const categories = ["Clothing", "Footwear"];
 
 const products = [
-  { name: "T-Shirt", price: 999, category: "Clothing" },
-  { name: "Shoes", price: 2999, category: "Footwear" }
+  {
+    name: "T-Shirt",
+    description: "Soft cotton t-shirt for everyday wear.",
+    price: 999,
+    stock: 50,
+    category: "Clothing"
+  },
+  {
+    name: "Shoes",
+    description: "Lightweight running shoes.",
+    price: 2999,
+    stock: 20,
+    category: "Footwear"
+  }
 ];
 
 const seed = async () => {
@@ -31,8 +44,16 @@ const seed = async () => {
 
   for (const product of products) {
     await pool.query(
-      "INSERT INTO products (name, price, category_id) VALUES ($1, $2, $3)",
-      [product.name, product.price, categoryIds[product.category]]
+      `INSERT INTO products (slug, name, description, price, stock, category_id)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        slugify(product.name),
+        product.name,
+        product.description,
+        product.price,
+        product.stock,
+        categoryIds[product.category]
+      ]
     );
   }
 

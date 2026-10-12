@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // PostgreSQL INTEGER / SERIAL columns can't hold anything bigger than this
-const MAX_DB_INTEGER = 2147483647;
+export const MAX_DB_INTEGER = 2147483647;
 
 // A valid database id, e.g. 5
 export const dbIdSchema = (label) => z
@@ -13,4 +13,12 @@ export const dbIdSchema = (label) => z
 // For routes like /products/:id — turns "5" into 5
 export const idParamSchema = z.object({
   id: z.coerce.number({ error: "id must be a number" }).pipe(dbIdSchema("id"))
+});
+
+// For routes like /products/slug/:slug
+export const slugParamSchema = z.object({
+  slug: z
+    .string()
+    .max(255, { error: "slug is too long" })
+    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, { error: "slug can only contain a-z, 0-9 and single dashes" })
 });

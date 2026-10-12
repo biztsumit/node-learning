@@ -36,6 +36,20 @@ export const getProduct = async (req, res) => {
   });
 };
 
+export const getProductBySlug = async (req, res) => {
+
+  const product = await productService.getProductBySlug(req.params.slug);
+
+  if (!product) {
+    throw new AppError(404, "Product not found");
+  }
+
+  res.json({
+    success: true,
+    data: product
+  });
+};
+
 export const addProduct = async (req, res) => {
 
   const product = await productService

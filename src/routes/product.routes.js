@@ -2,19 +2,21 @@ import { Router } from "express";
 import {
   getProducts,
   getProduct,
+  getProductBySlug,
   addProduct,
   updateProduct,
   deleteProduct
 } from "../controllers/product.controllers.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
-import { idParamSchema } from "../validators/common.validators.js";
+import { idParamSchema, slugParamSchema } from "../validators/common.validators.js";
 import { productSchema } from "../validators/product.validators.js";
 
 const router = Router();
 
 // Public
 router.get("/", getProducts);
+router.get("/slug/:slug", validate({ params: slugParamSchema }), getProductBySlug);
 router.get("/:id", validate({ params: idParamSchema }), getProduct);
 
 // Admin only
