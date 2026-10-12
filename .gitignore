@@ -1,0 +1,10 @@
+# Dependencies (reinstall with: npm install)
+node_modules/
+
+# Secrets — never commit
+.env
+
+# Logs and OS / editor clutter
+*.log
+.DS_Store
+Thumbs.db

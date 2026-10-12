@@ -1,0 +1,21 @@
+// Usage: npm run make-admin -- someone@example.com
+import pool from "../config/db.js";
+import { updateUserRole } from "../services/user.services.js";
+
+const email = process.argv[2]?.trim().toLowerCase();
+
+if (!email) {
+  console.error("Usage: npm run make-admin -- <email>");
+  process.exit(1);
+}
+
+const user = await updateUserRole(email, "admin");
+
+if (user) {
+  console.log(`${user.email} is now an admin`);
+} else {
+  console.error(`No user found with email ${email}`);
+  process.exitCode = 1;
+}
+
+await pool.end();
