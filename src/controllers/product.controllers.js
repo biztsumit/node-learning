@@ -14,11 +14,12 @@ const handleDbError = (err) => {
 
 export const getProducts = async (req, res) => {
 
-  const products = await productService.getAllProducts();
+  const { products, pagination } = await productService.findProducts(req.query);
 
   res.json({
     success: true,
-    data: products
+    data: products,
+    pagination
   });
 };
 

@@ -33,9 +33,72 @@ const toProduct = (row) => ({
     : null
 });
 
-export const getAllProducts = async () => {
-  const { rows } = await pool.query(`${SELECT_PRODUCTS} ORDER BY p.id`);
-  return rows.map(toProduct);
+// ORDER BY can't use $1 placeholders, so sort options come from this fixed list only.
+// Each ends with p.id so products with the same price/name always come in the same order.
+const SORT_OPTIONS = {
+  newest: "p.created_at DESC, p.id DESC",
+  price_asc: "p.price ASC, p.id ASC",
+  price_desc: "p.price DESC, p.id DESC",
+  name_asc: "p.name ASC, p.id ASC"
+};
+
+// In LIKE patterns, % and _ are wildcards. Escape them so searching "50%" means the text "50%".
+const escapeLike = (text) => text.replace(/[\\%_]/g, (char) => `\\${char}`);
+
+export const findProducts = async ({ search, category, minPrice, maxPrice, inStock, sort, page, limit }) => {
+
+  // Build the WHERE clause from only the filters that were given
+  const conditions = [];
+  const values = [];
+
+  // Adds a value to the list and returns its placeholder: "$1", "$2", ...
+  const addValue = (value) => {
+    values.push(value);
+    return `$${values.length}`;
+  };
+
+  if (search) {
+    const pattern = addValue(`%${escapeLike(search)}%`);
+    conditions.push(`(p.name ILIKE ${pattern} OR p.description ILIKE ${pattern})`);
+  }
+  if (category !== undefined) {
+    conditions.push(`p.category_id = ${addValue(category)}`);
+  }
+  if (minPrice !== undefined) {
+    conditions.push(`p.price >= ${addValue(minPrice)}`);
+  }
+  if (maxPrice !== undefined) {
+    conditions.push(`p.price <= ${addValue(maxPrice)}`);
+  }
+  if (inStock !== undefined) {
+    conditions.push(inStock ? "p.stock > 0" : "p.stock = 0");
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const offset = (page - 1) * limit;
+
+  // Run both queries at the same time: one page of products, and the total count
+  const [rowsResult, countResult] = await Promise.all([
+    pool.query(
+      `${SELECT_PRODUCTS} ${where}
+       ORDER BY ${SORT_OPTIONS[sort]}
+       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      [...values, limit, offset]
+    ),
+    pool.query(`SELECT COUNT(*)::int AS total FROM products p ${where}`, values)
+  ]);
+
+  const total = countResult.rows[0].total;
+
+  return {
+    products: rowsResult.rows.map(toProduct),
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    }
+  };
 };
 
 export const getProductById = async (id) => {

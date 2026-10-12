@@ -32,3 +32,46 @@ export const productSchema = z.object({
   // Optional: leave it out (or send null) for a product with no category
   categoryId: dbIdSchema("categoryId").nullable().default(null)
 });
+
+// Query string of GET /products, e.g. ?search=shirt&category=2&sort=price_asc&page=2
+// Everything in a query string is text, so numbers use z.coerce.
+const optionalPrice = (label) => z.coerce
+  .number({ error: `${label} must be a number` })
+  .int({ error: `${label} must be a whole number` })
+  .min(0, { error: `${label} can't be negative` })
+  .max(MAX_DB_INTEGER, { error: `${label} is too large` })
+  .optional();
+
+export const productListQuerySchema = z
+  .object({
+    search: z.string().trim().max(100, { error: "search must be at most 100 characters" }).optional(),
+    category: z.coerce.number({ error: "category must be a number" }).pipe(dbIdSchema("category")).optional(),
+    minPrice: optionalPrice("minPrice"),
+    maxPrice: optionalPrice("maxPrice"),
+    // Not z.coerce.boolean(): that turns the text "false" into true!
+    inStock: z
+      .enum(["true", "false"], { error: "inStock must be true or false" })
+      .transform((value) => value === "true")
+      .optional(),
+    sort: z
+      .enum(["newest", "price_asc", "price_desc", "name_asc"], {
+        error: "sort must be one of: newest, price_asc, price_desc, name_asc"
+      })
+      .default("newest"),
+    page: z.coerce
+      .number({ error: "page must be a number" })
+      .int({ error: "page must be a whole number" })
+      .min(1, { error: "page must be at least 1" })
+      .max(10000, { error: "page is too large" })
+      .default(1),
+    limit: z.coerce
+      .number({ error: "limit must be a number" })
+      .int({ error: "limit must be a whole number" })
+      .min(1, { error: "limit must be at least 1" })
+      .max(100, { error: "limit must be at most 100" })
+      .default(20)
+  })
+  .refine(
+    (query) => query.minPrice === undefined || query.maxPrice === undefined || query.minPrice <= query.maxPrice,
+    { error: "minPrice can't be greater than maxPrice", path: ["minPrice"] }
+  );

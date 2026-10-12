@@ -10,12 +10,12 @@ import {
 import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import { idParamSchema, slugParamSchema } from "../validators/common.validators.js";
-import { productSchema } from "../validators/product.validators.js";
+import { productSchema, productListQuerySchema } from "../validators/product.validators.js";
 
 const router = Router();
 
 // Public
-router.get("/", getProducts);
+router.get("/", validate({ query: productListQuerySchema }), getProducts);
 router.get("/slug/:slug", validate({ params: slugParamSchema }), getProductBySlug);
 router.get("/:id", validate({ params: idParamSchema }), getProduct);
 
