@@ -1,5 +1,6 @@
 import express from "express";
 import authRoutes from "./routes/auth.routes.js";
+import categoryRoutes from "./routes/category.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import { notFound, errorHandler } from "./middlewares/error.middleware.js";
@@ -15,6 +16,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/categories", categoryRoutes);
 app.use("/products", productRoutes);
 app.use("/users", userRoutes);
 

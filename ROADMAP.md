@@ -21,7 +21,7 @@ Node.js, Express and PostgreSQL. Each step teaches one set of backend concepts.
 
 ## Phase 2 — Product catalog
 
-- [ ] 2.1 Categories (first foreign key: product → category)
+- [x] 2.1 Categories (first foreign key: product → category)
 - [ ] 2.2 Richer products: description, stock, image URL, slug
 - [ ] 2.3 Pagination, search, filter by category/price, sorting
 

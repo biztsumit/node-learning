@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { dbIdSchema } from "./common.validators.js";
 
 export const productSchema = z.object({
   name: z
@@ -9,5 +10,7 @@ export const productSchema = z.object({
   price: z
     .number({ error: "price must be a number" })
     .int({ error: "price must be a whole number" })
-    .min(0, { error: "price can't be negative" })
+    .min(0, { error: "price can't be negative" }),
+  // Optional: leave it out (or send null) for a product with no category
+  categoryId: dbIdSchema("categoryId").nullable().default(null)
 });
