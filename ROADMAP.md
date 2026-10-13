@@ -27,7 +27,7 @@ Node.js, Express and PostgreSQL. Each step teaches one set of backend concepts.
 
 ## Phase 3 — Shopping cart
 
-- [ ] 3.1 Cart per user: add, update quantity, remove, view with totals
+- [x] 3.1 Cart per user: add, update quantity, remove, view with totals
 
 ## Phase 4 — Orders
 
