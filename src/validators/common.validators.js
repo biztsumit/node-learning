@@ -22,3 +22,19 @@ export const slugParamSchema = z.object({
     .max(255, { error: "slug is too long" })
     .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, { error: "slug can only contain a-z, 0-9 and single dashes" })
 });
+
+// ?page=2&limit=20 — spread into any list query schema: z.object({ ...paginationFields, ... })
+export const paginationFields = {
+  page: z.coerce
+    .number({ error: "page must be a number" })
+    .int({ error: "page must be a whole number" })
+    .min(1, { error: "page must be at least 1" })
+    .max(10000, { error: "page is too large" })
+    .default(1),
+  limit: z.coerce
+    .number({ error: "limit must be a number" })
+    .int({ error: "limit must be a whole number" })
+    .min(1, { error: "limit must be at least 1" })
+    .max(100, { error: "limit must be at most 100" })
+    .default(20)
+};

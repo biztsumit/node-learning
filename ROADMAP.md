@@ -31,8 +31,8 @@ Node.js, Express and PostgreSQL. Each step teaches one set of backend concepts.
 
 ## Phase 4 — Orders
 
-- [ ] 4.1 Checkout: cart → order inside a **transaction**, reduce stock
-- [ ] 4.2 Order history for users; order status updates for admins
+- [x] 4.1 Checkout: cart → order inside a **transaction**, reduce stock
+- [x] 4.2 Order history for users; order status updates for admins
 - [ ] 4.3 Shipping addresses
 
 ## Phase 5 — Payments

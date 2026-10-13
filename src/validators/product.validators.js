@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { dbIdSchema, MAX_DB_INTEGER } from "./common.validators.js";
+import { dbIdSchema, MAX_DB_INTEGER, paginationFields } from "./common.validators.js";
 
 export const productSchema = z.object({
   name: z
@@ -58,18 +58,7 @@ export const productListQuerySchema = z
         error: "sort must be one of: newest, price_asc, price_desc, name_asc"
       })
       .default("newest"),
-    page: z.coerce
-      .number({ error: "page must be a number" })
-      .int({ error: "page must be a whole number" })
-      .min(1, { error: "page must be at least 1" })
-      .max(10000, { error: "page is too large" })
-      .default(1),
-    limit: z.coerce
-      .number({ error: "limit must be a number" })
-      .int({ error: "limit must be a whole number" })
-      .min(1, { error: "limit must be at least 1" })
-      .max(100, { error: "limit must be at most 100" })
-      .default(20)
+    ...paginationFields
   })
   .refine(
     (query) => query.minPrice === undefined || query.maxPrice === undefined || query.minPrice <= query.maxPrice,

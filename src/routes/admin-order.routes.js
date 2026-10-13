@@ -1,0 +1,24 @@
+import { Router } from "express";
+import {
+  getAllOrders,
+  getAnyOrder,
+  updateOrderStatus
+} from "../controllers/order.controllers.js";
+import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.js";
+import { validate } from "../middlewares/validate.middleware.js";
+import { idParamSchema } from "../validators/common.validators.js";
+import {
+  adminOrderListQuerySchema,
+  updateOrderStatusSchema
+} from "../validators/order.validators.js";
+
+const router = Router();
+
+// Admins only: can see and update every customer's orders
+router.use(requireAuth, requireAdmin);
+
+router.get("/", validate({ query: adminOrderListQuerySchema }), getAllOrders);
+router.get("/:id", validate({ params: idParamSchema }), getAnyOrder);
+router.patch("/:id/status", validate({ params: idParamSchema, body: updateOrderStatusSchema }), updateOrderStatus);
+
+export default router;
