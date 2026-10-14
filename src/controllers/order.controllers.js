@@ -3,10 +3,10 @@ import { AppError } from "../utils/app-error.js";
 
 // ---------- Customers (only ever their own orders) ----------
 
-// POST /orders — checkout: turns the cart into an order
+// POST /orders  { addressId? } — checkout: turns the cart into an order
 export const placeOrder = async (req, res) => {
 
-  const order = await orderService.checkout(req.user.id);
+  const order = await orderService.checkout(req.user.id, req.body);
 
   res.status(201).json({
     success: true,

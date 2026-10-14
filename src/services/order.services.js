@@ -2,6 +2,7 @@ import pool from "../config/db.js";
 import { withTransaction } from "../db/transaction.js";
 import { AppError } from "../utils/app-error.js";
 import { canChangeStatus } from "../utils/order-status.js";
+import { getAddress } from "./address.services.js";
 
 // ---------- Reading orders ----------
 
@@ -12,6 +13,7 @@ const toOrder = (order, items, { includeCustomer }) => ({
   totalAmount: order.total_amount,
   createdAt: order.created_at,
   updatedAt: order.updated_at,
+  shippingAddress: order.shipping_address,
   ...(includeCustomer && {
     customer: { id: order.user_id, name: order.user_name, email: order.user_email }
   }),
@@ -37,7 +39,7 @@ export const getOrderById = async (orderId, { userId } = {}) => {
   }
 
   const { rows: orders } = await pool.query(
-    `SELECT o.id, o.status, o.total_amount, o.created_at, o.updated_at,
+    `SELECT o.id, o.status, o.total_amount, o.created_at, o.updated_at, o.shipping_address,
             u.id AS user_id, u.name AS user_name, u.email AS user_email
      FROM orders o
      JOIN users u ON u.id = o.user_id
@@ -121,11 +123,40 @@ export const listOrders = async ({ userId, status, page, limit }, { includeCusto
 
 // ---------- Placing an order ----------
 
+// Finds the address to ship to: the one the user picked, or else their default.
+// Always filtered by userId, so nobody can ship to (and read) someone else's address.
+const findShippingAddress = async (client, userId, addressId) => {
+  const address = addressId !== undefined
+    ? await getAddress(userId, addressId, client)
+    : await getDefaultAddress(client, userId);
+
+  if (!address) {
+    throw addressId !== undefined
+      ? new AppError(404, "Address not found")
+      : new AppError(400, "Add a shipping address first, or send an addressId");
+  }
+
+  // The snapshot stored on the order: the address as it is right now
+  const { id, label, isDefault, ...snapshot } = address;
+  return snapshot;
+};
+
+const getDefaultAddress = async (client, userId) => {
+  const { rows } = await client.query(
+    "SELECT id FROM addresses WHERE user_id = $1 AND is_default",
+    [userId]
+  );
+  return rows[0] && getAddress(userId, rows[0].id, client);
+};
+
 // Turns the user's cart into an order. All steps run in ONE transaction:
 // if anything fails (e.g. not enough stock), nothing is saved and the cart stays as it was.
-export const checkout = async (userId) => {
+export const checkout = async (userId, { addressId } = {}) => {
 
   const orderId = await withTransaction(async (client) => {
+
+    // 0. Where is it going? (fails early if there's no usable address)
+    const shippingAddress = await findShippingAddress(client, userId, addressId);
 
     // 1. Read the cart and LOCK the product rows (and cart rows) involved.
     //    Another checkout that wants the same products now has to wait until we finish,
@@ -168,8 +199,8 @@ export const checkout = async (userId) => {
     const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
     const { rows: [order] } = await client.query(
-      "INSERT INTO orders (user_id, total_amount) VALUES ($1, $2) RETURNING id",
-      [userId, totalAmount]
+      "INSERT INTO orders (user_id, total_amount, shipping_address) VALUES ($1, $2, $3) RETURNING id",
+      [userId, totalAmount, shippingAddress]
     );
 
     for (const item of cart) {

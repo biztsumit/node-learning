@@ -8,14 +8,14 @@ import {
 import { requireAuth } from "../middlewares/auth.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import { idParamSchema } from "../validators/common.validators.js";
-import { orderListQuerySchema } from "../validators/order.validators.js";
+import { checkoutSchema, orderListQuerySchema } from "../validators/order.validators.js";
 
 const router = Router();
 
 // Customers: every route here works on the logged-in user's own orders only
 router.use(requireAuth);
 
-router.post("/", placeOrder);
+router.post("/", validate({ body: checkoutSchema }), placeOrder);
 router.get("/", validate({ query: orderListQuerySchema }), getMyOrders);
 router.get("/:id", validate({ params: idParamSchema }), getMyOrder);
 router.post("/:id/cancel", validate({ params: idParamSchema }), cancelMyOrder);

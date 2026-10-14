@@ -6,6 +6,11 @@ const statusSchema = z.enum(ORDER_STATUSES, {
   error: `status must be one of: ${ORDER_STATUSES.join(", ")}`
 });
 
+// POST /orders — leave addressId out to use your default address
+export const checkoutSchema = z.object({
+  addressId: dbIdSchema("addressId").optional()
+});
+
 // GET /orders?status=pending&page=1
 export const orderListQuerySchema = z.object({
   status: statusSchema.optional(),

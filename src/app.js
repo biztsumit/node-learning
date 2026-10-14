@@ -1,4 +1,5 @@
 import express from "express";
+import addressRoutes from "./routes/address.routes.js";
 import adminOrderRoutes from "./routes/admin-order.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import cartRoutes from "./routes/cart.routes.js";
@@ -23,6 +24,7 @@ app.use("/categories", categoryRoutes);
 app.use("/products", productRoutes);
 app.use("/users", userRoutes);
 app.use("/cart", cartRoutes);
+app.use("/addresses", addressRoutes);
 app.use("/orders", orderRoutes);
 app.use("/admin/orders", adminOrderRoutes);
 
