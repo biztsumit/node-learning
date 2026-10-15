@@ -1,4 +1,5 @@
 import { env } from "../config/env.js";
+import { logger } from "../config/logger.js";
 import { withTransaction } from "../db/transaction.js";
 import { AppError } from "../utils/app-error.js";
 import * as razorpay from "./razorpay.client.js";
@@ -54,7 +55,7 @@ export const startPayment = async (userId, orderId) => {
           notes: { orderId: String(order.id) }
         });
       } catch (err) {
-        console.error(err);
+        logger.error({ err, orderId: order.id }, "Razorpay order creation failed");
         throw new AppError(502, "Could not reach the payment provider. Please try again");
       }
 
@@ -97,7 +98,10 @@ const recordSuccessfulPayment = async (client, { providerOrderId, providerPaymen
     return { result: "already_paid", orderId: payment.order_id };
   }
   if (amount !== undefined && amount !== payment.amount) {
-    console.error(`Payment ${providerPaymentId}: amount ${amount} doesn't match expected ${payment.amount}`);
+    logger.error(
+      { providerPaymentId, orderId: payment.order_id, paidAmount: amount, expectedAmount: payment.amount },
+      "Payment amount doesn't match the order"
+    );
     return { result: "amount_mismatch", orderId: payment.order_id };
   }
 
@@ -122,7 +126,10 @@ const recordSuccessfulPayment = async (client, { providerOrderId, providerPaymen
 
   // e.g. the order was cancelled while the customer was on the payment screen:
   // the money arrived, but the order isn't active any more, so it has to be refunded.
-  console.warn(`Payment ${providerPaymentId} received for order ${payment.order_id}, which is ${order.status}: refund needed`);
+  logger.warn(
+    { providerPaymentId, orderId: payment.order_id, orderStatus: order.status, amount: payment.amount },
+    "Payment received for an inactive order: refund needed"
+  );
   return { result: "needs_refund", orderId: payment.order_id };
 };
 

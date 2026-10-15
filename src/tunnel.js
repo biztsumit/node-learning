@@ -2,6 +2,7 @@
 // (like Razorpay webhooks) can reach it. Development only: never set NGROK_AUTHTOKEN in production.
 import ngrok from "@ngrok/ngrok";
 import { env } from "./config/env.js";
+import { logger } from "./config/logger.js";
 
 export const startTunnel = async (port) => {
 
@@ -18,12 +19,13 @@ export const startTunnel = async (port) => {
     });
 
     const url = listener.url();
-    console.log(`Public URL (ngrok): ${url}`);
-    console.log(`Razorpay webhook URL: ${url}/webhooks/razorpay`);
+    logger.info({ url, razorpayWebhookUrl: `${url}/webhooks/razorpay` }, "ngrok tunnel open");
     return url;
   } catch (err) {
-    // The app still works locally without the tunnel, so don't crash
-    console.error("Could not start the ngrok tunnel:", err.message);
+    // ngrok's error text can include the authtoken itself, so mask it before logging.
+    // The app still works locally without the tunnel, so warn instead of crashing.
+    const reason = err.message.split(env.NGROK_AUTHTOKEN).join("[REDACTED]");
+    logger.warn({ reason }, "Could not start the ngrok tunnel");
     return null;
   }
 };

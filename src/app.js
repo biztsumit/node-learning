@@ -11,6 +11,7 @@ import userRoutes from "./routes/user.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
 import { env } from "./config/env.js";
 import { notFound, errorHandler } from "./middlewares/error.middleware.js";
+import { requestLogger } from "./middlewares/request-logger.middleware.js";
 import { securityHeaders, corsPolicy, apiLimiter } from "./middlewares/security.middleware.js";
 
 const app = express();
@@ -19,7 +20,10 @@ const app = express();
 // This tells Express how many proxies to trust, so it reads the real client IP.
 app.set("trust proxy", env.TRUST_PROXY);
 
-// Security first: these run for every request
+// Very first: give every request an id and log it when it finishes (even if it's blocked below)
+app.use(requestLogger);
+
+// Security next: these run for every request
 app.use(securityHeaders);
 app.use(corsPolicy);
 app.use(apiLimiter);

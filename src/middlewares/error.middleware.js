@@ -32,11 +32,15 @@ export const errorHandler = (err, req, res, next) => {
     });
   }
 
-  // Anything else is a bug or an outage: log the details, hide them from the client
-  console.error(err);
+  // Anything else is a bug or an outage: log the details, hide them from the client.
+  // Handing the error to the request logger puts the full stack trace into this
+  // request's single log line, next to its request id.
+  res.err = err;
 
   res.status(500).json({
     success: false,
-    message: "Internal server error"
+    message: "Internal server error",
+    // The client can quote this id, and we can find the exact log line
+    requestId: req.id
   });
 };

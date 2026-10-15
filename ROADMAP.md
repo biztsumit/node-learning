@@ -48,7 +48,7 @@ Node.js, Express and PostgreSQL. Each step teaches one set of backend concepts.
 ## Phase 7 — Production ready
 
 - [x] 7.1 Security: helmet, CORS, rate limiting
-- [ ] 7.2 Logging
+- [x] 7.2 Logging
 - [ ] 7.3 Automated tests (Jest + Supertest)
 - [ ] 7.4 API docs (Swagger / OpenAPI)
 - [ ] 7.5 Deployment

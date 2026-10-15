@@ -4,6 +4,11 @@ import "dotenv/config";
 import { z } from "zod";
 
 const envSchema = z.object({
+  // "development" = readable coloured logs; "production" = one JSON object per line
+  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  // Logs below this level are skipped: trace < debug < info < warn < error < fatal ("silent" = none)
+  LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"]).default("info"),
+
   PORT: z.coerce.number().int().default(3000),
 
   DB_HOST: z.string().min(1),
