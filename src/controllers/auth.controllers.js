@@ -5,9 +5,11 @@ import { env } from "../config/env.js";
 import { AppError } from "../utils/app-error.js";
 import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
 
+// The role is not put in the token any more: requireAuth reads it fresh from the database.
+// tokenVersion must match users.token_version, or the token is refused.
 const createToken = (user) => {
   return jwt.sign(
-    { userId: user.id, role: user.role },
+    { userId: user.id, tokenVersion: user.token_version ?? 0 },
     env.JWT_SECRET,
     { expiresIn: env.JWT_EXPIRES_IN }
   );
@@ -72,5 +74,55 @@ export const getMe = async (req, res) => {
   res.json({
     success: true,
     data: user
+  });
+};
+
+// PATCH /auth/me  { name }
+export const updateMe = async (req, res) => {
+
+  const user = await userService.updateUserName(req.user.id, req.body.name);
+
+  res.json({
+    success: true,
+    data: user
+  });
+};
+
+// POST /auth/change-password  { currentPassword, newPassword }
+export const changePassword = async (req, res) => {
+
+  const { currentPassword, newPassword } = req.body;
+
+  // Ask for the current password again: a stolen token alone can't take over the account
+  const currentHash = await userService.getPasswordHash(req.user.id);
+  const correct = await bcrypt.compare(currentPassword, currentHash);
+
+  if (!correct) {
+    throw new AppError(400, "Validation failed", [
+      { field: "currentPassword", message: "currentPassword is incorrect" }
+    ]);
+  }
+
+  const newHash = await bcrypt.hash(newPassword, 10);
+
+  // This also logs out every device, including this one...
+  const user = await userService.updatePassword(req.user.id, newHash);
+
+  res.json({
+    success: true,
+    message: "Password changed. You've been logged out on all other devices",
+    // ...so send this device a fresh token to stay logged in
+    data: { token: createToken(user) }
+  });
+};
+
+// POST /auth/logout-all — e.g. "I lost my phone"
+export const logoutAll = async (req, res) => {
+
+  await userService.bumpTokenVersion(req.user.id);
+
+  res.json({
+    success: true,
+    message: "Logged out on all devices"
   });
 };

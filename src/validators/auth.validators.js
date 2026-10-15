@@ -25,3 +25,29 @@ export const loginSchema = z.object({
     .string({ error: "password is required" })
     .min(1, { error: "password is required" })
 });
+
+// PATCH /auth/me — only the name can be changed here.
+// (Changing email safely needs a "confirm your new email" step, so it isn't offered.)
+export const updateProfileSchema = z.object({
+  name: z
+    .string({ error: "name is required" })
+    .trim()
+    .min(1, { error: "name is required" })
+    .max(255, { error: "name must be at most 255 characters" })
+});
+
+// POST /auth/change-password
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z
+      .string({ error: "currentPassword is required" })
+      .min(1, { error: "currentPassword is required" }),
+    newPassword: z
+      .string({ error: "newPassword is required" })
+      .min(6, { error: "newPassword must be at least 6 characters" })
+      .max(72, { error: "newPassword must be at most 72 characters" })
+  })
+  .refine((body) => body.newPassword !== body.currentPassword, {
+    error: "newPassword must be different from currentPassword",
+    path: ["newPassword"]
+  });

@@ -42,7 +42,7 @@ Node.js, Express and PostgreSQL. Each step teaches one set of backend concepts.
 
 ## Phase 6 — Accounts & reviews
 
-- [ ] 6.1 Update profile, change password
+- [x] 6.1 Update profile, change password
 - [ ] 6.2 Product reviews and ratings
 
 ## Phase 7 — Production ready
