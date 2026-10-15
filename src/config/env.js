@@ -20,6 +20,28 @@ const envSchema = z.object({
   RAZORPAY_KEY_SECRET: z.string().min(1).optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional(),
 
+  // Websites allowed to call this API from a browser, comma-separated, e.g.
+  // "http://localhost:5173,https://shop.example.com". Empty = no browser sites allowed.
+  CORS_ORIGINS: z
+    .string()
+    .default("")
+    .transform((value) => value.split(",").map((origin) => origin.trim()).filter(Boolean))
+    // An origin is exactly scheme + host (+ port): no path, no trailing slash
+    .pipe(z.array(
+      z.string().refine(
+        (origin) => URL.canParse(origin) && /^https?:$/.test(new URL(origin).protocol) && new URL(origin).origin === origin,
+        { error: "each CORS origin must look like http://localhost:5173 (no path, no trailing slash)" }
+      )
+    )),
+
+  // How many proxies sit in front of this server (ngrok = 1). 0 when clients connect directly.
+  TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+
+  // Rate limits, per client IP
+  API_RATE_LIMIT: z.coerce.number().int().min(1).default(120),      // requests per minute
+  LOGIN_RATE_LIMIT: z.coerce.number().int().min(1).default(10),     // FAILED logins per 15 minutes
+  SIGNUP_RATE_LIMIT: z.coerce.number().int().min(1).default(5),     // sign-ups per hour
+
   // ngrok (optional, development only): with a token, the server also gets a public https URL
   NGROK_AUTHTOKEN: z.string().min(1).optional(),
   NGROK_DOMAIN: z.string().min(1).optional()

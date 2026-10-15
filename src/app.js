@@ -9,14 +9,26 @@ import productRoutes from "./routes/product.routes.js";
 import { adminReviewRoutes } from "./routes/review.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
+import { env } from "./config/env.js";
 import { notFound, errorHandler } from "./middlewares/error.middleware.js";
+import { securityHeaders, corsPolicy, apiLimiter } from "./middlewares/security.middleware.js";
 
 const app = express();
+
+// Behind a proxy (like ngrok), req.ip would be the PROXY's address for everyone.
+// This tells Express how many proxies to trust, so it reads the real client IP.
+app.set("trust proxy", env.TRUST_PROXY);
+
+// Security first: these run for every request
+app.use(securityHeaders);
+app.use(corsPolicy);
+app.use(apiLimiter);
 
 // Webhooks come BEFORE express.json(): their signature is checked against the raw body bytes
 app.use("/webhooks", webhookRoutes);
 
-app.use(express.json());
+// Refuse JSON bodies bigger than 100 KB (nothing in this API needs more)
+app.use(express.json({ limit: "100kb" }));
 
 app.get("/", (req, res) => {
   res.json({
