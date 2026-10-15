@@ -7,9 +7,13 @@ import categoryRoutes from "./routes/category.routes.js";
 import orderRoutes from "./routes/order.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import userRoutes from "./routes/user.routes.js";
+import webhookRoutes from "./routes/webhook.routes.js";
 import { notFound, errorHandler } from "./middlewares/error.middleware.js";
 
 const app = express();
+
+// Webhooks come BEFORE express.json(): their signature is checked against the raw body bytes
+app.use("/webhooks", webhookRoutes);
 
 app.use(express.json());
 

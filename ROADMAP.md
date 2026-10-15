@@ -37,8 +37,8 @@ Node.js, Express and PostgreSQL. Each step teaches one set of backend concepts.
 
 ## Phase 5 — Payments
 
-- [ ] 5.1 Payment gateway in test mode (Razorpay or Stripe)
-- [ ] 5.2 Webhooks to confirm payments
+- [x] 5.1 Payment gateway in test mode (Razorpay)
+- [x] 5.2 Webhooks to confirm payments
 
 ## Phase 6 — Accounts & reviews
 

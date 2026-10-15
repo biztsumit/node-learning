@@ -13,7 +13,16 @@ const envSchema = z.object({
   DB_NAME: z.string().min(1),
 
   JWT_SECRET: z.string().min(32, { error: "must be at least 32 characters" }),
-  JWT_EXPIRES_IN: z.string().default("1d")
+  JWT_EXPIRES_IN: z.string().default("1d"),
+
+  // Payments (optional): without these the app runs, but payment routes answer 503
+  RAZORPAY_KEY_ID: z.string().min(1).optional(),
+  RAZORPAY_KEY_SECRET: z.string().min(1).optional(),
+  RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional(),
+
+  // ngrok (optional, development only): with a token, the server also gets a public https URL
+  NGROK_AUTHTOKEN: z.string().min(1).optional(),
+  NGROK_DOMAIN: z.string().min(1).optional()
 });
 
 const result = envSchema.safeParse(process.env);
@@ -27,3 +36,7 @@ if (!result.success) {
 }
 
 export const env = result.data;
+
+export const paymentsEnabled = Boolean(
+  env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET && env.RAZORPAY_WEBHOOK_SECRET
+);
