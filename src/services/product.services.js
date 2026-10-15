@@ -13,6 +13,8 @@ const SELECT_PRODUCTS = `
     p.price,
     p.stock,
     p.image_url,
+    p.rating_avg,
+    p.rating_count,
     c.id AS category_id,
     c.name AS category_name
   FROM products p
@@ -28,6 +30,8 @@ const toProduct = (row) => ({
   price: row.price,
   stock: row.stock,
   imageUrl: row.image_url,
+  // NUMERIC comes back from pg as a string ("4.50"), so convert it
+  rating: { average: Number(row.rating_avg), count: row.rating_count },
   category: row.category_id
     ? { id: row.category_id, name: row.category_name }
     : null
@@ -39,7 +43,9 @@ const SORT_OPTIONS = {
   newest: "p.created_at DESC, p.id DESC",
   price_asc: "p.price ASC, p.id ASC",
   price_desc: "p.price DESC, p.id DESC",
-  name_asc: "p.name ASC, p.id ASC"
+  name_asc: "p.name ASC, p.id ASC",
+  // Best average first; with equal averages, the one with more reviews wins
+  rating_desc: "p.rating_avg DESC, p.rating_count DESC, p.id DESC"
 };
 
 // In LIKE patterns, % and _ are wildcards. Escape them so searching "50%" means the text "50%".

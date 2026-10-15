@@ -11,8 +11,12 @@ import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import { idParamSchema, slugParamSchema } from "../validators/common.validators.js";
 import { productSchema, productListQuerySchema } from "../validators/product.validators.js";
+import { productReviewRoutes } from "./review.routes.js";
 
 const router = Router();
+
+// Reviews live under each product: /products/:id/reviews
+router.use("/:id/reviews", productReviewRoutes);
 
 // Public
 router.get("/", validate({ query: productListQuerySchema }), getProducts);

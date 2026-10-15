@@ -54,8 +54,8 @@ export const productListQuerySchema = z
       .transform((value) => value === "true")
       .optional(),
     sort: z
-      .enum(["newest", "price_asc", "price_desc", "name_asc"], {
-        error: "sort must be one of: newest, price_asc, price_desc, name_asc"
+      .enum(["newest", "price_asc", "price_desc", "name_asc", "rating_desc"], {
+        error: "sort must be one of: newest, price_asc, price_desc, name_asc, rating_desc"
       })
       .default("newest"),
     ...paginationFields
