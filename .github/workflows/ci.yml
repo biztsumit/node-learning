@@ -1,0 +1,56 @@
+# Continuous Integration: GitHub runs the whole test suite on a fresh machine
+# for every push and every pull request. See the "Actions" tab of the repository.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# A newer push to the same branch cancels the older, still-running check
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # A throwaway PostgreSQL server, the same major version as development
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        # Wait until the database accepts connections before running the steps
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    # What .env provides on your laptop. These are NOT secrets: the database only
+    # exists for the few minutes this job runs, and the JWT secret signs test tokens only.
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: postgres
+      JWT_SECRET: ci-only-secret-used-to-sign-test-tokens-0123456789
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json   # reads "engines.node" (24.x), like Render does
+          cache: npm
+
+      # Exactly the versions in package-lock.json
+      - run: npm ci
+
+      # "pretest" creates the ecommerce_test database and runs every migration on it first
+      - run: npm test

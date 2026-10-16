@@ -62,7 +62,7 @@ Ordered so each phase builds on the previous one. ⭐ = recommended next.
 
 ## Phase 8 — Close the business-logic gaps
 
-- [ ] 8.1 ⭐ CI: run `npm test` on GitHub Actions for every push (with a PostgreSQL service); deploy only when green
+- [x] 8.1 CI: GitHub Actions runs `npm test` on every push (PostgreSQL 18 service); Render deploys only when green
 - [ ] 8.2 ⭐ Expire unpaid orders: a scheduled job cancels `pending` orders after 30 minutes and returns their stock (today an unpaid order holds stock forever)
 - [ ] 8.3 Idempotency keys (`Idempotency-Key` header) for checkout and payment start, so retries on a flaky network never create duplicates
 - [ ] 8.4 Automatic Razorpay refunds for "paid but cancelled" orders, with a `refunded` status
@@ -78,7 +78,7 @@ Ordered so each phase builds on the previous one. ⭐ = recommended next.
 ## Phase 10 — A richer store
 
 - [ ] 10.1 Product variants (size / colour) with their own SKU, price and stock
-- [ ] 10.2 Image uploads to cloud storage with presigned URLs
+- [x] 10.2 Image uploads: signed direct uploads to Cloudinary, thumbnails, automatic clean-up
 - [ ] 10.3 Real search: PostgreSQL full-text search with ranking, typo-tolerant matching (`pg_trgm`)
 - [ ] 10.4 Coupons and discounts (percent / fixed, expiry, usage limits — safe under concurrency)
 - [ ] 10.5 Wishlist, and a stock-movement ledger (every stock change recorded with its reason)

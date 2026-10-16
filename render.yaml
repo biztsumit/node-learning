@@ -8,7 +8,8 @@ services:
     plan: free
     region: singapore                  # closest Render region to India
     # No "branch:" = deploy the GitHub repo's default branch (yours is "dev").
-    # Every push to it triggers a new deploy.
+    # checksPass = deploy a push only after its GitHub checks (our CI tests) pass.
+    autoDeployTrigger: checksPass
     buildCommand: npm ci
     # Migrations run on every deploy before the server starts (they skip what's already applied)
     startCommand: npm run migrate && npm start
