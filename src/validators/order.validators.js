@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { dbIdSchema, paginationFields } from "./common.validators.js";
+import { idSchema, paginationFields } from "./common.validators.js";
 import { ORDER_STATUSES } from "../utils/order-status.js";
 
 const statusSchema = z.enum(ORDER_STATUSES, {
@@ -8,7 +8,7 @@ const statusSchema = z.enum(ORDER_STATUSES, {
 
 // POST /orders — leave addressId out to use your default address
 export const checkoutSchema = z.object({
-  addressId: dbIdSchema("addressId").optional()
+  addressId: idSchema("addressId").optional()
 });
 
 // GET /orders?status=pending&page=1
@@ -17,9 +17,9 @@ export const orderListQuerySchema = z.object({
   ...paginationFields
 });
 
-// GET /admin/orders?userId=5&status=paid
+// GET /admin/orders?userId=<uuid>&status=paid
 export const adminOrderListQuerySchema = orderListQuerySchema.extend({
-  userId: z.coerce.number({ error: "userId must be a number" }).pipe(dbIdSchema("userId")).optional()
+  userId: idSchema("userId").optional()
 });
 
 // PATCH /admin/orders/:id/status

@@ -1,7 +1,10 @@
 import { randomBytes } from "node:crypto";
 import pool from "../config/db.js";
+import { logger } from "../config/logger.js";
+import { withTransaction } from "../db/transaction.js";
 import { slugify } from "../utils/slugify.js";
 import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
+import { deleteImage, productImagePublicId, thumbnailUrl } from "./cloudinary.client.js";
 
 // LEFT JOIN keeps products that have no category (their category columns come back as NULL)
 const SELECT_PRODUCTS = `
@@ -30,6 +33,8 @@ const toProduct = (row) => ({
   price: row.price,
   stock: row.stock,
   imageUrl: row.image_url,
+  // A small, fast version for product lists (resized by Cloudinary for our own images)
+  thumbnailUrl: row.image_url ? thumbnailUrl(row.image_url) : null,
   // NUMERIC comes back from pg as a string ("4.50"), so convert it
   rating: { average: Number(row.rating_avg), count: row.rating_count },
   category: row.category_id
@@ -152,20 +157,73 @@ export const createProduct = async ({ name, description, price, stock, imageUrl,
 };
 
 // The slug is NOT changed on update, so links to the product keep working after a rename
+// When a product's image changes or the product is deleted, remove the old file from
+// Cloudinary so unused images don't pile up (and cost storage). Only OUR uploads are
+// deleted, never outside links. Best effort: runs after the database change is saved,
+// and a failure is logged rather than undoing the admin's edit.
+const removeOldImage = async (previousUrl, currentUrl) => {
+  const publicId = productImagePublicId(previousUrl);
+  if (!publicId || previousUrl === currentUrl) {
+    return;
+  }
+  try {
+    await deleteImage(publicId);
+  } catch (err) {
+    logger.warn({ err, publicId }, "Could not delete old product image from Cloudinary");
+  }
+};
+
+// Lock → read the current image → change, in one transaction. Returns the image that was
+// replaced, or undefined if there's no such product. (Locking matters: if two admins change
+// the same product at once, each must see the image the OTHER one just set, or a file would
+// be left behind in Cloudinary.)
+const updateAndGetPreviousImage = (id, sql, values) =>
+  withTransaction(async (client) => {
+    const { rows } = await client.query("SELECT image_url FROM products WHERE id = $1 FOR UPDATE", [id]);
+    if (rows.length === 0) {
+      return undefined;
+    }
+    await client.query(sql, values);
+    return { previousImageUrl: rows[0].image_url };
+  });
+
 export const updateProductById = async (id, { name, description, price, stock, imageUrl, categoryId }) => {
-  const { rowCount } = await pool.query(
+  const result = await updateAndGetPreviousImage(
+    id,
     `UPDATE products
      SET name = $1, description = $2, price = $3, stock = $4, image_url = $5, category_id = $6
      WHERE id = $7`,
     [name, description, price, stock, imageUrl, categoryId, id]
   );
-  return rowCount > 0 ? getProductById(id) : undefined;
+  if (!result) {
+    return undefined;
+  }
+  await removeOldImage(result.previousImageUrl, imageUrl);
+  return getProductById(id);
+};
+
+// Sets (or, with null, removes) just the product's image
+export const setProductImage = async (id, imageUrl) => {
+  const result = await updateAndGetPreviousImage(
+    id,
+    "UPDATE products SET image_url = $1 WHERE id = $2",
+    [imageUrl, id]
+  );
+  if (!result) {
+    return undefined;
+  }
+  await removeOldImage(result.previousImageUrl, imageUrl);
+  return getProductById(id);
 };
 
 export const deleteProductById = async (id) => {
-  const { rowCount } = await pool.query(
-    "DELETE FROM products WHERE id = $1",
+  const { rows } = await pool.query(
+    "DELETE FROM products WHERE id = $1 RETURNING image_url",
     [id]
   );
-  return rowCount > 0;
+  if (rows.length === 0) {
+    return false;
+  }
+  await removeOldImage(rows[0].image_url, null);
+  return true;
 };

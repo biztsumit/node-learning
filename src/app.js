@@ -9,6 +9,8 @@ import healthRoutes from "./routes/health.routes.js";
 import orderRoutes from "./routes/order.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import { adminReviewRoutes } from "./routes/review.routes.js";
+import toolsRoutes from "./routes/tools.routes.js";
+import uploadRoutes from "./routes/upload.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
 import { env } from "./config/env.js";
@@ -43,6 +45,11 @@ app.use(express.json({ limit: "100kb" }));
 // Interactive API documentation
 app.use("/docs", docsRoutes);
 
+// Small browser tools for trying things out (development only), e.g. /tools/product-image.html
+if (env.NODE_ENV !== "production") {
+  app.use("/tools", toolsRoutes);
+}
+
 app.get("/", (req, res) => {
   res.json({
     message: "E-commerce API is running"
@@ -58,6 +65,7 @@ app.use("/addresses", addressRoutes);
 app.use("/orders", orderRoutes);
 app.use("/admin/orders", adminOrderRoutes);
 app.use("/admin/reviews", adminReviewRoutes);
+app.use("/admin/uploads", uploadRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

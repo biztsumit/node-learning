@@ -1,0 +1,16 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; padding: 16px; }
+main { max-width: 760px; margin: 0 auto; }
+h1 { font-size: 1.4rem; }
+h2 { font-size: 1.05rem; margin-top: 1.6rem; }
+.hint { color: GrayText; font-size: 0.9rem; }
+form, section > select, section > input, section > button { margin: 4px 4px 4px 0; }
+input, select, button { font: inherit; padding: 6px 10px; }
+button { cursor: pointer; }
+button.secondary { opacity: 0.8; }
+.images { display: flex; gap: 16px; flex-wrap: wrap; }
+figure { margin: 0; }
+figure img { width: 220px; height: 220px; object-fit: contain; border: 1px solid GrayText; border-radius: 6px; }
+figcaption { font-size: 0.8rem; color: GrayText; max-width: 220px; }
+#log { font-family: ui-monospace, monospace; font-size: 0.85rem; padding-left: 1.2rem; }
+#log li.error { color: crimson; }

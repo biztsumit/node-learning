@@ -51,7 +51,8 @@ export const startPayment = async (userId, orderId) => {
         razorpayOrder = await razorpay.createRazorpayOrder({
           amount,
           currency: "INR",
-          receipt: `order_${order.id}`,
+          // Razorpay allows at most 40 characters here; a UUID is 36
+          receipt: order.id,
           notes: { orderId: String(order.id) }
         });
       } catch (err) {

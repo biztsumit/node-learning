@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { dbIdSchema } from "./common.validators.js";
+import { idSchema } from "./common.validators.js";
 
 // Most of one product a single cart can hold
 export const MAX_QUANTITY_PER_ITEM = 99;
@@ -12,7 +12,7 @@ const quantitySchema = z
 
 // POST /cart/items
 export const addCartItemSchema = z.object({
-  productId: dbIdSchema("productId"),
+  productId: idSchema("productId"),
   quantity: quantitySchema.default(1)
 });
 
@@ -23,5 +23,5 @@ export const updateCartItemSchema = z.object({
 
 // For routes like /cart/items/:productId
 export const productIdParamSchema = z.object({
-  productId: z.coerce.number({ error: "productId must be a number" }).pipe(dbIdSchema("productId"))
+  productId: idSchema("productId")
 });

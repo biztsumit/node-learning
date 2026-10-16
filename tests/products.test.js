@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { api, pool, resetDatabase, closeDatabase, createUser, createProduct } from "./helpers.js";
@@ -49,11 +50,20 @@ describe("browsing products (public)", () => {
     await api().get("/products?inStock=yes").expect(400);
   });
 
-  it("finds a product by slug and 404s for unknown ids", async () => {
+  it("finds a product by slug or id, 404s for unknown ids and 400s for malformed ones", async () => {
     const product = await createProduct({ name: "Blue Mug" });
     await api().get(`/products/slug/${product.slug}`).expect(200);
-    await api().get("/products/999999").expect(404);
-    await api().get("/products/99999999999").expect(400);
+    await api().get(`/products/${product.id}`).expect(200);
+    await api().get(`/products/${crypto.randomUUID()}`).expect(404);   // well-formed, doesn't exist
+    await api().get("/products/123").expect(400);                     // old-style number id
+    await api().get("/products/not-a-uuid").expect(400);
+  });
+
+  it("gives products time-ordered UUIDv7 ids", async () => {
+    const first = await createProduct({ name: "First" });
+    const second = await createProduct({ name: "Second" });
+    assert.match(first.id, /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    assert.ok(second.id > first.id, "a newer UUIDv7 sorts after an older one");
   });
 });
 

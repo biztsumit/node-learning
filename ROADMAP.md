@@ -51,4 +51,52 @@ Node.js, Express and PostgreSQL. Each step teaches one set of backend concepts.
 - [x] 7.2 Logging
 - [x] 7.3 Automated tests (node:test + Supertest)
 - [x] 7.4 API docs (Swagger / OpenAPI)
-- [ ] 7.5 Deployment to Render (render.yaml, health check and graceful shutdown ready; deploy pending)
+- [x] 7.5 Deployment to Render: https://ecommerce-api-we2w.onrender.com
+- [x] 7.6 UUIDv7 ids everywhere (migration 013, existing data converted)
+
+---
+
+# Next: advanced features
+
+Ordered so each phase builds on the previous one. ⭐ = recommended next.
+
+## Phase 8 — Close the business-logic gaps
+
+- [ ] 8.1 ⭐ CI: run `npm test` on GitHub Actions for every push (with a PostgreSQL service); deploy only when green
+- [ ] 8.2 ⭐ Expire unpaid orders: a scheduled job cancels `pending` orders after 30 minutes and returns their stock (today an unpaid order holds stock forever)
+- [ ] 8.3 Idempotency keys (`Idempotency-Key` header) for checkout and payment start, so retries on a flaky network never create duplicates
+- [ ] 8.4 Automatic Razorpay refunds for "paid but cancelled" orders, with a `refunded` status
+- [ ] 8.5 Human-friendly order numbers (e.g. `ORD-7K3M9Q`): random, not counting, since UUIDs are hard to read out on a support call
+
+## Phase 9 — Background work, Redis and email
+
+- [ ] 9.1 Redis + a job queue (BullMQ): run slow work outside the request, with retries
+- [ ] 9.2 Emails: order confirmation, shipped, delivered (templates, sent by the queue)
+- [ ] 9.3 Forgot password and email verification with one-time, hashed, expiring tokens
+- [ ] 9.4 Caching hot reads (categories, product lists) with invalidation; Redis-backed rate limits for several servers
+
+## Phase 10 — A richer store
+
+- [ ] 10.1 Product variants (size / colour) with their own SKU, price and stock
+- [ ] 10.2 Image uploads to cloud storage with presigned URLs
+- [ ] 10.3 Real search: PostgreSQL full-text search with ranking, typo-tolerant matching (`pg_trgm`)
+- [ ] 10.4 Coupons and discounts (percent / fixed, expiry, usage limits — safe under concurrency)
+- [ ] 10.5 Wishlist, and a stock-movement ledger (every stock change recorded with its reason)
+- [ ] 10.6 Cursor pagination for very large lists
+
+## Phase 11 — Admin insights
+
+- [ ] 11.1 Sales dashboard API: revenue per day, top products, repeat customers (window functions, materialized views)
+- [ ] 11.2 Audit log: who changed what, when (prices, order statuses, roles)
+
+## Phase 12 — Engineering maturity
+
+- [ ] 12.1 Docker + docker-compose (app, PostgreSQL, Redis) for one-command setup
+- [ ] 12.2 TypeScript
+- [ ] 12.3 Observability: error tracking (Sentry), metrics (`/metrics` for Prometheus), tracing (OpenTelemetry)
+- [ ] 12.4 Refresh tokens in httpOnly cookies; two-factor login for admins
+- [ ] 12.5 A staging environment that mirrors production
+
+## Phase 13 — A frontend
+
+- [ ] 13.1 React + Vite storefront and admin panel using this API (CORS, auth, Razorpay Checkout)

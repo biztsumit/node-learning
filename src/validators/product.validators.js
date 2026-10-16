@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { dbIdSchema, MAX_DB_INTEGER, paginationFields } from "./common.validators.js";
+import { idSchema, MAX_DB_INTEGER, paginationFields } from "./common.validators.js";
 
 export const productSchema = z.object({
   name: z
@@ -30,10 +30,10 @@ export const productSchema = z.object({
     .nullable()
     .default(null),
   // Optional: leave it out (or send null) for a product with no category
-  categoryId: dbIdSchema("categoryId").nullable().default(null)
+  categoryId: idSchema("categoryId").nullable().default(null)
 });
 
-// Query string of GET /products, e.g. ?search=shirt&category=2&sort=price_asc&page=2
+// Query string of GET /products, e.g. ?search=shirt&category=<uuid>&sort=price_asc&page=2
 // Everything in a query string is text, so numbers use z.coerce.
 const optionalPrice = (label) => z.coerce
   .number({ error: `${label} must be a number` })
@@ -45,7 +45,7 @@ const optionalPrice = (label) => z.coerce
 export const productListQuerySchema = z
   .object({
     search: z.string().trim().max(100, { error: "search must be at most 100 characters" }).optional(),
-    category: z.coerce.number({ error: "category must be a number" }).pipe(dbIdSchema("category")).optional(),
+    category: idSchema("category").optional(),
     minPrice: optionalPrice("minPrice"),
     maxPrice: optionalPrice("maxPrice"),
     // Not z.coerce.boolean(): that turns the text "false" into true!

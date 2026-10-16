@@ -70,6 +70,13 @@ describe("sessions", () => {
     await api().post("/auth/login").send({ email: user.email, password: "newpass123" }).expect(200);
   });
 
+  it("treats tokens from before the UUID switch (numeric userId) as ended sessions", async () => {
+    const { default: jwt } = await import("jsonwebtoken");
+    const oldToken = jwt.sign({ userId: 1, tokenVersion: 0 }, process.env.JWT_SECRET ?? (await import("../src/config/env.js")).env.JWT_SECRET);
+    const res = await api().get("/auth/me").set("Authorization", `Bearer ${oldToken}`).expect(401);
+    assert.match(res.body.message, /session has ended/);
+  });
+
   it("logout-all ends every session", async () => {
     const user = await createUser();
     await api().post("/auth/logout-all").set(user.auth).expect(200);

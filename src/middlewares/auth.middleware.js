@@ -2,6 +2,9 @@ import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { getAuthState } from "../services/user.services.js";
 import { AppError } from "../utils/app-error.js";
+import { idSchema } from "../validators/common.validators.js";
+
+const isUuid = (value) => idSchema("userId").safeParse(value).success;
 
 export const requireAuth = async (req, res, next) => {
 
@@ -19,6 +22,12 @@ export const requireAuth = async (req, res, next) => {
     payload = jwt.verify(token, env.JWT_SECRET);
   } catch {
     throw new AppError(401, "Invalid or expired token");
+  }
+
+  // Tokens issued before ids became UUIDs carry a number. Looking a number up in a uuid column
+  // is a database error (500), so treat those tokens like any other ended session.
+  if (!isUuid(payload.userId)) {
+    throw new AppError(401, "Your session has ended. Please log in again");
   }
 
   // The signature proves WE issued this token. The database tells us if it's still valid:

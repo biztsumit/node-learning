@@ -1,18 +1,19 @@
 import { z } from "zod";
 
-// PostgreSQL INTEGER / SERIAL columns can't hold anything bigger than this
+// PostgreSQL INTEGER columns (prices, stock, ...) can't hold anything bigger than this
 export const MAX_DB_INTEGER = 2147483647;
 
-// A valid database id, e.g. 5
-export const dbIdSchema = (label) => z
-  .number({ error: `${label} must be a number` })
-  .int({ error: `${label} must be a whole number` })
-  .min(1, { error: `${label} must be a positive number` })
-  .max(MAX_DB_INTEGER, { error: `${label} is too large` });
+// A database id: a UUID like "01a14386-1238-7b41-9618-7ff4c0a7b55d".
+// Checking the format here means a bad id gets a clear 400, instead of a database error (500).
+export const idSchema = (label) => z
+  .string({ error: `${label} is required` })
+  .trim()
+  .toLowerCase()
+  .pipe(z.uuid({ error: `${label} must be a valid id` }));
 
-// For routes like /products/:id — turns "5" into 5
+// For routes like /products/:id
 export const idParamSchema = z.object({
-  id: z.coerce.number({ error: "id must be a number" }).pipe(dbIdSchema("id"))
+  id: idSchema("id")
 });
 
 // For routes like /products/slug/:slug

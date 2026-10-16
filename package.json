@@ -33,6 +33,7 @@
   },
   "devDependencies": {
     "@apidevtools/swagger-parser": "^13.1.0",
+    "cloudinary": "^2.11.0",
     "nodemon": "^3.1.14",
     "pino-pretty": "^13.2.0",
     "supertest": "^7.3.1"

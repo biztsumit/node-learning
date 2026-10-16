@@ -10,8 +10,12 @@ import { productSchema, productListQuerySchema } from "../validators/product.val
 import { createAddressSchema, updateAddressSchema } from "../validators/address.validators.js";
 import { checkoutSchema, orderListQuerySchema, adminOrderListQuerySchema, updateOrderStatusSchema } from "../validators/order.validators.js";
 import { verifyPaymentSchema } from "../validators/payment.validators.js";
+import { productImageSchema } from "../validators/upload.validators.js";
 import { createReviewSchema, updateReviewSchema, reviewListQuerySchema } from "../validators/review.validators.js";
 import { ORDER_STATUSES } from "../utils/order-status.js";
+
+// Every id in this API is a UUID (time-ordered UUIDv7)
+const UUID = { type: "string", format: "uuid", example: "01a14386-1238-7b41-9618-7ff4c0a7b55d" };
 
 // ---------- Turning zod schemas into OpenAPI pieces ----------
 
@@ -42,7 +46,7 @@ const pathId = (name = "id", description) => ({
   in: "path",
   required: true,
   description,
-  schema: { type: "integer", minimum: 1 }
+  schema: UUID
 });
 
 // ---------- Responses ----------
@@ -239,6 +243,30 @@ export const openApiDocument = {
       },
       delete: { tags: ["Reviews"], summary: "Delete my review", ...LOGGED_IN, responses: { ...message("Deleted"), ...errors(401, 404) } }
     },
+    "/products/{id}/image": {
+      parameters: [pathId("id", "Product id")],
+      patch: {
+        tags: ["Admin"], summary: "Set or remove a product's image", ...LOGGED_IN,
+        description: [
+          "Step 3 of an image upload. `imageUrl` must be the `secure_url` Cloudinary returned for an upload",
+          "made with `POST /admin/uploads/product-image`; send `null` to remove the image.",
+          "The previous image is deleted from Cloudinary."
+        ].join(" "),
+        requestBody: jsonBody(productImageSchema),
+        responses: { ...ok("Updated product", ref("Product")), ...errors(400, 401, 403, 404, 503) }
+      }
+    },
+    "/admin/uploads/product-image": {
+      post: {
+        tags: ["Admin"], summary: "Get permission to upload one product image", ...LOGGED_IN,
+        description: [
+          "Step 1 of an image upload. Then (step 2) the browser POSTs the file to `uploadUrl` as `multipart/form-data`,",
+          "with every entry of `fields` as a form field plus `file`. Cloudinary answers with `secure_url`,",
+          "which you send to `PATCH /products/{id}/image` (step 3). The file never passes through this API."
+        ].join(" "),
+        responses: { ...ok("Signed upload permission", ref("ImageUpload")), ...errors(401, 403, 503) }
+      }
+    },
     "/admin/reviews/{id}": {
       parameters: [pathId("id", "Review id")],
       delete: { tags: ["Admin"], summary: "Remove any review", ...LOGGED_IN, responses: { ...message("Deleted"), ...errors(401, 403, 404) } }
@@ -412,7 +440,7 @@ export const openApiDocument = {
       User: {
         type: "object",
         properties: {
-          id: { type: "integer" }, name: { type: "string" }, email: { type: "string", format: "email" },
+          id: UUID, name: { type: "string" }, email: { type: "string", format: "email" },
           role: { type: "string", enum: ["user", "admin"] }, created_at: { type: "string", format: "date-time" }
         }
       },
@@ -420,19 +448,38 @@ export const openApiDocument = {
         type: "object",
         properties: { user: ref("User"), token: { type: "string", description: "Send as `Authorization: Bearer <token>`" } }
       },
-      Category: { type: "object", properties: { id: { type: "integer" }, name: { type: "string" } } },
+      Category: { type: "object", properties: { id: UUID, name: { type: "string" } } },
       Product: {
         type: "object",
         properties: {
-          id: { type: "integer" },
+          id: UUID,
           slug: { type: "string", example: "ceramic-coffee-mug" },
           name: { type: "string" },
           description: { type: "string" },
           price: { type: "integer", description: "Whole rupees", example: 349 },
           stock: { type: "integer" },
-          imageUrl: { type: ["string", "null"] },
+          imageUrl: { type: ["string", "null"], description: "The original image" },
+          thumbnailUrl: { type: ["string", "null"], description: "400×400, automatic format and quality (for lists)" },
           rating: { type: "object", properties: { average: { type: "number", example: 4.5 }, count: { type: "integer" } } },
           category: { anyOf: [ref("Category"), { type: "null" }] }
+        }
+      },
+      ImageUpload: {
+        type: "object",
+        properties: {
+          uploadUrl: { type: "string", example: "https://api.cloudinary.com/v1_1/your-cloud/image/upload" },
+          fields: {
+            type: "object",
+            description: "Send each of these as a form field, together with `file`",
+            properties: {
+              public_id: { type: "string", example: "ecommerce/products/2f0c6a52-…" },
+              allowed_formats: { type: "string", example: "jpg,png,webp" },
+              timestamp: { type: "integer" },
+              api_key: { type: "string" },
+              signature: { type: "string" }
+            }
+          },
+          expiresAt: { type: "string", format: "date-time" }
         }
       },
       Cart: {
@@ -443,7 +490,7 @@ export const openApiDocument = {
             items: {
               type: "object",
               properties: {
-                productId: { type: "integer" }, slug: { type: "string" }, name: { type: "string" },
+                productId: UUID, slug: { type: "string" }, name: { type: "string" },
                 price: { type: "integer" }, imageUrl: { type: ["string", "null"] }, stock: { type: "integer" },
                 quantity: { type: "integer" }, lineTotal: { type: "integer" }
               }
@@ -456,7 +503,7 @@ export const openApiDocument = {
       Address: {
         type: "object",
         properties: {
-          id: { type: "integer" }, label: { type: ["string", "null"] }, fullName: { type: "string" }, phone: { type: "string" },
+          id: UUID, label: { type: ["string", "null"] }, fullName: { type: "string" }, phone: { type: "string" },
           line1: { type: "string" }, line2: { type: ["string", "null"] }, city: { type: "string" }, state: { type: "string" },
           postalCode: { type: "string" }, country: { type: "string", example: "IN" }, isDefault: { type: "boolean" }
         }
@@ -464,15 +511,15 @@ export const openApiDocument = {
       OrderSummary: {
         type: "object",
         properties: {
-          id: { type: "integer" }, status: { type: "string", enum: ORDER_STATUSES }, totalAmount: { type: "integer" },
+          id: UUID, status: { type: "string", enum: ORDER_STATUSES }, totalAmount: { type: "integer" },
           itemCount: { type: "integer" }, createdAt: { type: "string", format: "date-time" },
-          customer: { type: "object", description: "Admin lists only", properties: { id: { type: "integer" }, name: { type: "string" }, email: { type: "string" } } }
+          customer: { type: "object", description: "Admin lists only", properties: { id: UUID, name: { type: "string" }, email: { type: "string" } } }
         }
       },
       Order: {
         type: "object",
         properties: {
-          id: { type: "integer" },
+          id: UUID,
           status: { type: "string", enum: ORDER_STATUSES },
           totalAmount: { type: "integer", description: "Whole rupees" },
           createdAt: { type: "string", format: "date-time" },
@@ -483,7 +530,7 @@ export const openApiDocument = {
             items: {
               type: "object",
               properties: {
-                productId: { type: ["integer", "null"], description: "null if the product was deleted later" },
+                productId: { type: ["string", "null"], format: "uuid", description: "null if the product was deleted later" },
                 productName: { type: "string" }, unitPrice: { type: "integer" }, quantity: { type: "integer" }, lineTotal: { type: "integer" }
               }
             }
@@ -493,7 +540,7 @@ export const openApiDocument = {
       PaymentStart: {
         type: "object",
         properties: {
-          orderId: { type: "integer" },
+          orderId: UUID,
           keyId: { type: "string", description: "Razorpay key id (public)" },
           razorpayOrderId: { type: "string", example: "order_Nx8abc" },
           amount: { type: "integer", description: "In paise", example: 79900 },
@@ -504,7 +551,7 @@ export const openApiDocument = {
       Review: {
         type: "object",
         properties: {
-          id: { type: "integer" }, rating: { type: "integer", minimum: 1, maximum: 5 }, comment: { type: "string" },
+          id: UUID, rating: { type: "integer", minimum: 1, maximum: 5 }, comment: { type: "string" },
           reviewer: { type: "string", example: "Riya S." },
           createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" }
         }

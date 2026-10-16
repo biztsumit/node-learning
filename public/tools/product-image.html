@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Product image upload (dev tool)</title>
+  <link rel="stylesheet" href="product-image.css">
+</head>
+<body>
+  <main>
+    <h1>Product image upload</h1>
+    <p class="hint">Development tool. Shows the 3-step upload: get a signed permission from the API, upload straight to Cloudinary, attach the image to a product.</p>
+
+    <section>
+      <h2>1. Log in as an admin</h2>
+      <form id="login">
+        <input name="email" type="email" placeholder="admin email" required>
+        <input name="password" type="password" placeholder="password" required>
+        <button>Log in</button>
+      </form>
+      <p id="who" class="hint"></p>
+    </section>
+
+    <section>
+      <h2>2. Pick a product and an image</h2>
+      <select id="product" disabled><option>Log in first</option></select>
+      <input id="file" type="file" accept="image/jpeg,image/png,image/webp" disabled>
+      <button id="upload" disabled>Upload and attach</button>
+      <button id="remove" class="secondary" disabled>Remove image</button>
+    </section>
+
+    <section>
+      <h2>3. Result</h2>
+      <div class="images">
+        <figure><img id="original" alt=""><figcaption>imageUrl (original)</figcaption></figure>
+        <figure><img id="thumb" alt=""><figcaption>thumbnailUrl (400×400, resized by Cloudinary)</figcaption></figure>
+      </div>
+      <ol id="log"></ol>
+    </section>
+  </main>
+  <script src="product-image.js"></script>
+</body>
+</html>

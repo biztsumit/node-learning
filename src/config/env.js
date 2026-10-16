@@ -30,6 +30,12 @@ const envSchema = z.object({
   RAZORPAY_KEY_SECRET: z.string().min(1).optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional(),
 
+  // Image uploads (optional): without these the app runs, but upload routes answer 503.
+  // All three are on the Cloudinary dashboard: https://console.cloudinary.com
+  CLOUDINARY_CLOUD_NAME: z.string().regex(/^[a-z0-9_-]+$/i, { error: "must be your Cloudinary cloud name" }).optional(),
+  CLOUDINARY_API_KEY: z.string().min(1).optional(),
+  CLOUDINARY_API_SECRET: z.string().min(1).optional(),
+
   // Websites allowed to call this API from a browser, comma-separated, e.g.
   // "http://localhost:5173,https://shop.example.com". Empty = no browser sites allowed.
   CORS_ORIGINS: z
@@ -87,4 +93,8 @@ export const env = result.data;
 
 export const paymentsEnabled = Boolean(
   env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET && env.RAZORPAY_WEBHOOK_SECRET
+);
+
+export const uploadsEnabled = Boolean(
+  env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET
 );

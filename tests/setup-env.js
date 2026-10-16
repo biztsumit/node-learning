@@ -18,6 +18,11 @@ process.env.RAZORPAY_KEY_ID = "rzp_test_AUTOMATEDTESTS";
 process.env.RAZORPAY_KEY_SECRET = "test_key_secret";
 process.env.RAZORPAY_WEBHOOK_SECRET = "test_webhook_secret";
 
+// Fake Cloudinary account. The upload tests intercept calls to Cloudinary, too.
+process.env.CLOUDINARY_CLOUD_NAME = "test-cloud";
+process.env.CLOUDINARY_API_KEY = "111111111111111";
+process.env.CLOUDINARY_API_SECRET = "test_cloudinary_secret";
+
 // The tests delete everything in their database before each test. Never let that be the real one.
 if (!process.env.DB_NAME.endsWith("_test")) {
   throw new Error(`Refusing to run tests against "${process.env.DB_NAME}": the database name must end with "_test"`);
