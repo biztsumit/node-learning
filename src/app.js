@@ -5,6 +5,7 @@ import authRoutes from "./routes/auth.routes.js";
 import cartRoutes from "./routes/cart.routes.js";
 import categoryRoutes from "./routes/category.routes.js";
 import docsRoutes from "./routes/docs.routes.js";
+import healthRoutes from "./routes/health.routes.js";
 import orderRoutes from "./routes/order.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import { adminReviewRoutes } from "./routes/review.routes.js";
@@ -21,7 +22,11 @@ const app = express();
 // This tells Express how many proxies to trust, so it reads the real client IP.
 app.set("trust proxy", env.TRUST_PROXY);
 
-// Very first: give every request an id and log it when it finishes (even if it's blocked below)
+// Health check first: the hosting platform calls it every few seconds, so it skips
+// request logging (it would flood the logs) and rate limiting (it must never be blocked)
+app.use("/health", healthRoutes);
+
+// Then: give every request an id and log it when it finishes (even if it's blocked below)
 app.use(requestLogger);
 
 // Security next: these run for every request

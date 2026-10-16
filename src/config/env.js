@@ -11,11 +11,16 @@ const envSchema = z.object({
 
   PORT: z.coerce.number().int().default(3000),
 
-  DB_HOST: z.string().min(1),
-  DB_PORT: z.coerce.number().int(),
-  DB_USER: z.string().min(1),
-  DB_PASSWORD: z.string().min(1),
-  DB_NAME: z.string().min(1),
+  // The database: EITHER one connection string (what hosting platforms give you)...
+  DATABASE_URL: z.string().regex(/^postgres(ql)?:\/\//, { error: "must start with postgres:// or postgresql://" }).optional(),
+  // ...OR the separate parts (what we use locally)
+  DB_HOST: z.string().min(1).optional(),
+  DB_PORT: z.coerce.number().int().optional(),
+  DB_USER: z.string().min(1).optional(),
+  DB_PASSWORD: z.string().min(1).optional(),
+  DB_NAME: z.string().min(1).optional(),
+  // Encrypt the database connection (needed when connecting to a hosted database from outside)
+  DB_SSL: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
 
   JWT_SECRET: z.string().min(32, { error: "must be at least 32 characters" }),
   JWT_EXPIRES_IN: z.string().default("1d"),
@@ -50,9 +55,25 @@ const envSchema = z.object({
   // ngrok (optional, development only): with a token, the server also gets a public https URL
   NGROK_AUTHTOKEN: z.string().min(1).optional(),
   NGROK_DOMAIN: z.string().min(1).optional()
-});
+})
+  .superRefine((settings, ctx) => {
+    if (settings.DATABASE_URL) {
+      return;
+    }
+    for (const key of ["DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME"]) {
+      if (settings[key] === undefined) {
+        ctx.addIssue({ code: "custom", path: [key], message: "required (or set DATABASE_URL instead)" });
+      }
+    }
+  });
 
-const result = envSchema.safeParse(process.env);
+// A setting that's present but empty ("RAZORPAY_KEY_ID=") counts as not set.
+// Hosting dashboards often create empty variables for fields you leave blank.
+const settings = Object.fromEntries(
+  Object.entries(process.env).filter(([, value]) => value !== "")
+);
+
+const result = envSchema.safeParse(settings);
 
 if (!result.success) {
   console.error("Invalid or missing settings in .env:");

@@ -6,7 +6,8 @@ import { logger } from "./config/logger.js";
 
 export const startTunnel = async (port) => {
 
-  if (!env.NGROK_AUTHTOKEN) {
+  // A real server already has a public address, so the tunnel is for development only
+  if (!env.NGROK_AUTHTOKEN || env.NODE_ENV === "production") {
     return null;
   }
 

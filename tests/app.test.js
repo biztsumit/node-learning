@@ -5,6 +5,15 @@ import { api, closeDatabase } from "./helpers.js";
 
 after(closeDatabase);
 
+describe("health check", () => {
+
+  it("reports ok when the database is reachable", async () => {
+    const res = await api().get("/health").expect(200);
+    assert.equal(res.body.status, "ok");
+    assert.equal(res.body.database, "ok");
+  });
+});
+
 describe("every response", () => {
 
   it("has security headers and no X-Powered-By", async () => {

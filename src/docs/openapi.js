@@ -103,12 +103,22 @@ export const openApiDocument = {
     { name: "Addresses", description: "Saved shipping addresses" },
     { name: "Orders", description: "Checkout, order history and payments" },
     { name: "Admin", description: "Admin-only management" },
-    { name: "Webhooks", description: "Called by Razorpay's servers, not by apps" }
+    { name: "Webhooks", description: "Called by Razorpay's servers, not by apps" },
+    { name: "System", description: "Status of the service" }
   ],
 
   paths: {
     "/": {
-      get: { tags: ["Catalog"], summary: "Health check", ...PUBLIC, responses: { 200: { description: "The API is running" } } }
+      get: { tags: ["System"], summary: "Welcome message", ...PUBLIC, responses: { 200: { description: "The API is running" } } }
+    },
+    "/health": {
+      get: {
+        tags: ["System"], summary: "Health check (used by the hosting platform)", ...PUBLIC,
+        responses: {
+          200: { description: "The app and its database are working" },
+          503: { description: "The database can't be reached" }
+        }
+      }
     },
 
     // ----- Auth -----
