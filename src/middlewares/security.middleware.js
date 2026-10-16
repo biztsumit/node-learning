@@ -23,8 +23,9 @@ export const corsPolicy = cors({
     // true = send the "allowed" headers; false = send none, and the browser blocks the page
     callback(null, env.CORS_ORIGINS.includes(origin));
   },
-  // Let browser code read the rate-limit headers (e.g. to show "try again in 30s")
-  exposedHeaders: ["RateLimit", "RateLimit-Policy", "Retry-After"]
+  // Let browser code read these response headers (e.g. to show "try again in 30s",
+  // know a response was a replay, or quote the request id in a bug report)
+  exposedHeaders: ["RateLimit", "RateLimit-Policy", "Retry-After", "Idempotency-Replayed", "X-Request-Id"]
 });
 
 // ---------- Rate limits ----------

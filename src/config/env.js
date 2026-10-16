@@ -30,6 +30,12 @@ const envSchema = z.object({
   RAZORPAY_KEY_SECRET: z.string().min(1).optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional(),
 
+  // Unpaid orders are cancelled (and their stock released) after this many minutes.
+  // Default 4320 = 3 days. Their items stay reserved for the whole time.
+  ORDER_PAYMENT_TIMEOUT_MINUTES: z.coerce.number().int().min(1).default(3 * 24 * 60),
+  // How often the server checks for such orders
+  ORDER_EXPIRY_CHECK_SECONDS: z.coerce.number().int().min(5).default(60),
+
   // Image uploads (optional): without these the app runs, but upload routes answer 503.
   // All three are on the Cloudinary dashboard: https://console.cloudinary.com
   CLOUDINARY_CLOUD_NAME: z.string().regex(/^[a-z0-9_-]+$/i, { error: "must be your Cloudinary cloud name" }).optional(),

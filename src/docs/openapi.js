@@ -41,6 +41,15 @@ const queryParams = (schema) => {
   }));
 };
 
+// Optional header for actions that must not happen twice (see the middleware for the rules)
+const IDEMPOTENCY_KEY = {
+  name: "Idempotency-Key",
+  in: "header",
+  required: false,
+  description: "A random key you create once per action (e.g. crypto.randomUUID()) and resend on every retry of it. A retry gets the original response back (header `Idempotency-Replayed: true`) instead of doing the action again. Kept for 24 hours, per user.",
+  schema: { type: "string", minLength: 8, maxLength: 255, pattern: "^[A-Za-z0-9_-]+$", example: "3f6b1c9e-8e2a-4c1d-9b7a-2d5e6f708192" }
+};
+
 const pathId = (name = "id", description) => ({
   name,
   in: "path",
@@ -280,9 +289,10 @@ export const openApiDocument = {
     "/cart/items": {
       post: {
         tags: ["Cart"], summary: "Add a product (or more of it)", ...LOGGED_IN,
+        parameters: [IDEMPOTENCY_KEY],
         description: `Adding a product that's already in the cart raises its quantity. At most ${MAX_QUANTITY_PER_ITEM} of one product, and never more than the stock.`,
         requestBody: jsonBody(addCartItemSchema),
-        responses: { ...ok("Updated cart", ref("Cart")), ...errors(400, 401, 404, 409) }
+        responses: { ...ok("Updated cart", ref("Cart")), ...errors(400, 401, 404, 409, 422) }
       }
     },
     "/cart/items/{productId}": {
@@ -319,9 +329,10 @@ export const openApiDocument = {
     "/orders": {
       post: {
         tags: ["Orders"], summary: "Checkout: turn my cart into an order", ...LOGGED_IN,
-        description: "Leave out `addressId` to ship to your default address. Stock is reserved now; the order starts as `pending`.",
+        parameters: [IDEMPOTENCY_KEY],
+        description: "Leave out `addressId` to ship to your default address. Stock is reserved now; the order starts as `pending` and must be paid by `expiresAt` (3 days by default; set ORDER_PAYMENT_TIMEOUT_MINUTES to change it), or it's cancelled automatically and the stock released.",
         requestBody: { ...jsonBody(checkoutSchema), required: false },
-        responses: { ...ok("Order placed", ref("Order"), { status: 201 }), ...errors(400, 401, 404, 409) }
+        responses: { ...ok("Order placed", ref("Order"), { status: 201 }), ...errors(400, 401, 404, 409, 422) }
       },
       get: {
         tags: ["Orders"], summary: "My orders (newest first)", ...LOGGED_IN,
@@ -409,7 +420,8 @@ export const openApiDocument = {
       401: { description: "Not logged in, or the session has ended", content: { "application/json": { schema: ref("Error") } } },
       403: { description: "Logged in, but not allowed", content: { "application/json": { schema: ref("Error") } } },
       404: { description: "Not found (or not yours)", content: { "application/json": { schema: ref("Error") } } },
-      409: { description: "Conflicts with the current state (stock, status, duplicates)", content: { "application/json": { schema: ref("ValidationError") } } },
+      409: { description: "Conflicts with the current state (stock, status, duplicates, or a request with the same Idempotency-Key still running)", content: { "application/json": { schema: ref("ValidationError") } } },
+      422: { description: "This Idempotency-Key was already used for a different request", content: { "application/json": { schema: ref("Error") } } },
       429: { description: "Too many requests. See the `Retry-After` header", content: { "application/json": { schema: ref("Error") } } },
       502: { description: "The payment provider couldn't be reached", content: { "application/json": { schema: ref("Error") } } },
       503: { description: "Payments are not configured on this server", content: { "application/json": { schema: ref("Error") } } }
@@ -523,6 +535,11 @@ export const openApiDocument = {
           status: { type: "string", enum: ORDER_STATUSES },
           totalAmount: { type: "integer", description: "Whole rupees" },
           createdAt: { type: "string", format: "date-time" },
+          expiresAt: {
+            type: ["string", "null"], format: "date-time",
+            description: "Pending orders only: pay before this time, or the order is cancelled and its stock released"
+          },
+          cancelReason: { type: ["string", "null"], enum: ["customer", "admin", "payment_timeout", null] },
           updatedAt: { type: "string", format: "date-time" },
           shippingAddress: { description: "A copy of the address at checkout time", anyOf: [{ type: "object" }, { type: "null" }] },
           items: {

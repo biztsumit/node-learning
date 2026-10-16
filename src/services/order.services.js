@@ -1,4 +1,6 @@
 import pool from "../config/db.js";
+import { env } from "../config/env.js";
+import { logger } from "../config/logger.js";
 import { withTransaction } from "../db/transaction.js";
 import { AppError } from "../utils/app-error.js";
 import { canChangeStatus } from "../utils/order-status.js";
@@ -13,6 +15,11 @@ const toOrder = (order, items, { includeCustomer }) => ({
   totalAmount: order.total_amount,
   createdAt: order.created_at,
   updatedAt: order.updated_at,
+  // Pending orders must be paid by this time, or they're cancelled and their stock released
+  expiresAt: order.status === "pending"
+    ? new Date(order.created_at.getTime() + env.ORDER_PAYMENT_TIMEOUT_MINUTES * 60_000)
+    : null,
+  cancelReason: order.cancel_reason,
   shippingAddress: order.shipping_address,
   ...(includeCustomer && {
     customer: { id: order.user_id, name: order.user_name, email: order.user_email }
@@ -39,7 +46,7 @@ export const getOrderById = async (orderId, { userId } = {}) => {
   }
 
   const { rows: orders } = await pool.query(
-    `SELECT o.id, o.status, o.total_amount, o.created_at, o.updated_at, o.shipping_address,
+    `SELECT o.id, o.status, o.total_amount, o.created_at, o.updated_at, o.shipping_address, o.cancel_reason,
             u.id AS user_id, u.name AS user_name, u.email AS user_email
      FROM orders o
      JOIN users u ON u.id = o.user_id
@@ -270,14 +277,15 @@ const restoreStock = async (client, orderId) => {
   );
 };
 
-const applyStatus = async (client, orderId, newStatus) => {
+// cancelReason: who/what cancelled it ("customer", "admin" or "payment_timeout")
+const applyStatus = async (client, orderId, newStatus, { cancelReason = null } = {}) => {
   if (newStatus === "cancelled") {
     await restoreStock(client, orderId);
   }
 
   await client.query(
-    "UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2",
-    [newStatus, orderId]
+    "UPDATE orders SET status = $1, cancel_reason = $3, updated_at = NOW() WHERE id = $2",
+    [newStatus, orderId, newStatus === "cancelled" ? cancelReason : null]
   );
 };
 
@@ -295,7 +303,7 @@ export const cancelOrder = async (userId, orderId) => {
       throw new AppError(409, `Only pending orders can be cancelled. This order is ${order.status}`);
     }
 
-    await applyStatus(client, orderId, "cancelled");
+    await applyStatus(client, orderId, "cancelled", { cancelReason: "customer" });
   });
 
   return getOrderById(orderId, { userId });
@@ -315,8 +323,55 @@ export const changeOrderStatus = async (orderId, newStatus) => {
       throw new AppError(409, `Can't change an order from "${order.status}" to "${newStatus}"`);
     }
 
-    await applyStatus(client, orderId, newStatus);
+    await applyStatus(client, orderId, newStatus, { cancelReason: "admin" });
   });
 
   return getOrderById(orderId);
+};
+
+// ---------- Expiring unpaid orders (run by a background job) ----------
+
+// Cancels pending orders older than the payment timeout and puts their stock back.
+// Returns the ids it cancelled.
+//
+// Safe to run on several servers at the same moment: "FOR UPDATE SKIP LOCKED" means
+// "lock one expired order that NOBODY ELSE has locked; skip the ones that are busy".
+// So two jobs never pick the same order, and a job never waits behind a customer who's
+// cancelling (or paying for) that order right now.
+//
+// One order per transaction: each order's stock is released as soon as it's done, a
+// problem with one order doesn't undo the others, and locks are held only briefly.
+export const expireUnpaidOrders = async ({ maxOrders = 100 } = {}) => {
+
+  const expired = [];
+
+  while (expired.length < maxOrders) {
+    const orderId = await withTransaction(async (client) => {
+      const { rows } = await client.query(
+        `SELECT id FROM orders
+         WHERE status = 'pending'
+           AND created_at < NOW() - make_interval(mins => $1)
+         ORDER BY created_at
+         LIMIT 1
+         FOR UPDATE SKIP LOCKED`,
+        [env.ORDER_PAYMENT_TIMEOUT_MINUTES]
+      );
+
+      if (rows.length === 0) {
+        return null;
+      }
+
+      await applyStatus(client, rows[0].id, "cancelled", { cancelReason: "payment_timeout" });
+      return rows[0].id;
+    });
+
+    if (!orderId) {
+      break;
+    }
+
+    logger.info({ orderId }, "Cancelled unpaid order: payment time ran out, stock released");
+    expired.push(orderId);
+  }
+
+  return expired;
 };

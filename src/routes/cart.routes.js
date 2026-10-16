@@ -7,6 +7,7 @@ import {
   clearCart
 } from "../controllers/cart.controllers.js";
 import { requireAuth } from "../middlewares/auth.middleware.js";
+import { idempotency } from "../middlewares/idempotency.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import {
   addCartItemSchema,
@@ -21,7 +22,8 @@ router.use(requireAuth);
 
 router.get("/", getCart);
 router.delete("/", clearCart);
-router.post("/items", validate({ body: addCartItemSchema }), addItem);
+// Idempotency-Key: a retried "add to cart" doesn't add the quantity twice
+router.post("/items", idempotency, validate({ body: addCartItemSchema }), addItem);
 router.patch("/items/:productId", validate({ params: productIdParamSchema, body: updateCartItemSchema }), updateItem);
 router.delete("/items/:productId", validate({ params: productIdParamSchema }), removeItem);
 

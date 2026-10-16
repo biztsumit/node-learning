@@ -3,6 +3,7 @@ import { logger } from "./config/logger.js";
 import app from "./app.js";
 import pool, { connectDB } from "./config/db.js";
 import { startTunnel } from "./tunnel.js";
+import { startOrderExpiryJob } from "./jobs/expire-orders.job.js";
 
 const PORT = env.PORT;
 
@@ -20,8 +21,9 @@ process.on("uncaughtException", (err) => {
 // Graceful shutdown. When the platform deploys a new version (or you press Ctrl+C), it asks
 // this process to stop. Stop accepting NEW requests, let the ones in progress finish, close
 // the database pool, then exit. Without this, a customer mid-checkout could get cut off.
-const shutdown = (server) => (signal) => {
+const shutdown = (server, stopJobs) => (signal) => {
   logger.info({ signal }, "Shutting down: no new requests, finishing the current ones");
+  stopJobs();
 
   // If something hangs, don't wait forever: the platform would kill us anyway
   setTimeout(() => {
@@ -49,8 +51,12 @@ const startServer = async () => {
     startTunnel(PORT);
   });
 
-  process.on("SIGTERM", shutdown(server));   // sent by hosting platforms, Docker, systemd
-  process.on("SIGINT", shutdown(server));    // Ctrl+C in a terminal
+  // Background work that runs alongside the API (started here, not in app.js, so tests
+  // that import the app don't get timers running behind their backs)
+  const stopOrderExpiryJob = startOrderExpiryJob();
+
+  process.on("SIGTERM", shutdown(server, stopOrderExpiryJob));   // sent by hosting platforms, Docker, systemd
+  process.on("SIGINT", shutdown(server, stopOrderExpiryJob));    // Ctrl+C in a terminal
 };
 
 startServer();

@@ -7,6 +7,7 @@ import {
 } from "../controllers/order.controllers.js";
 import { startOrderPayment, verifyOrderPayment } from "../controllers/payment.controllers.js";
 import { requireAuth } from "../middlewares/auth.middleware.js";
+import { idempotency } from "../middlewares/idempotency.middleware.js";
 import { requirePaymentsEnabled } from "../middlewares/payments.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import { idParamSchema } from "../validators/common.validators.js";
@@ -18,7 +19,8 @@ const router = Router();
 // Customers: every route here works on the logged-in user's own orders only
 router.use(requireAuth);
 
-router.post("/", validate({ body: checkoutSchema }), placeOrder);
+// Idempotency-Key: a retried checkout returns the first order instead of placing a second one
+router.post("/", idempotency, validate({ body: checkoutSchema }), placeOrder);
 router.get("/", validate({ query: orderListQuerySchema }), getMyOrders);
 router.get("/:id", validate({ params: idParamSchema }), getMyOrder);
 router.post("/:id/cancel", validate({ params: idParamSchema }), cancelMyOrder);

@@ -14,7 +14,8 @@
     "migrate": "node src/db/migrate.js",
     "seed": "node src/db/seed.js",
     "pretest": "node tests/setup-db.js",
-    "test": "node --import ./tests/setup-env.js --test --test-concurrency=1 \"tests/*.test.js\""
+    "test": "node --import ./tests/setup-env.js --test --test-concurrency=1 \"tests/*.test.js\"",
+    "expire-orders": "node src/scripts/expire-orders.js"
   },
   "dependencies": {
     "@ngrok/ngrok": "^1.7.0",

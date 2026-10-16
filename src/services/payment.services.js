@@ -18,12 +18,13 @@ export const startPayment = async (userId, orderId) => {
     // Lock the order: two "Pay" clicks at once must not create two payment requests
     const { rows: [order] } = await client.query(
       `SELECT o.id, o.status, o.total_amount, o.shipping_address->>'phone' AS phone,
+              o.created_at < NOW() - make_interval(mins => $3) AS expired,
               u.name, u.email
        FROM orders o
        JOIN users u ON u.id = o.user_id
        WHERE o.id = $1 AND o.user_id = $2
        FOR UPDATE OF o`,
-      [orderId, userId]
+      [orderId, userId, env.ORDER_PAYMENT_TIMEOUT_MINUTES]
     );
 
     if (!order) {
@@ -31,6 +32,10 @@ export const startPayment = async (userId, orderId) => {
     }
     if (order.status !== "pending") {
       throw new AppError(409, `This order is ${order.status}, so it can't be paid`);
+    }
+    // The expiry job runs every minute; don't start a payment in the gap before it gets here
+    if (order.expired) {
+      throw new AppError(409, "The time to pay for this order has run out. Please place the order again");
     }
 
     const amount = toPaise(order.total_amount);
