@@ -4,6 +4,7 @@ import adminOrderRoutes from "./routes/admin-order.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import cartRoutes from "./routes/cart.routes.js";
 import categoryRoutes from "./routes/category.routes.js";
+import docsRoutes from "./routes/docs.routes.js";
 import orderRoutes from "./routes/order.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import { adminReviewRoutes } from "./routes/review.routes.js";
@@ -33,6 +34,9 @@ app.use("/webhooks", webhookRoutes);
 
 // Refuse JSON bodies bigger than 100 KB (nothing in this API needs more)
 app.use(express.json({ limit: "100kb" }));
+
+// Interactive API documentation
+app.use("/docs", docsRoutes);
 
 app.get("/", (req, res) => {
   res.json({
