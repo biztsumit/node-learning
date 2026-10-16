@@ -1,0 +1,147 @@
+// Automatic refunds through Razorpay.
+//
+// Two steps, on purpose:
+//   1. requestRefund(client, ...)  — INSIDE the transaction that decides money must go back
+//      (an admin cancelling a paid order, or a payment arriving for a cancelled one).
+//      It only writes a "pending" refund row, so the decision and the record commit together.
+//   2. processRefund(id)           — AFTER that commit: calls Razorpay. If the call fails,
+//      the row simply stays pending and retryPendingRefunds() (the background job) tries again.
+// Never call an outside API while you still might roll back: Razorpay can't be rolled back.
+import pool from "../config/db.js";
+import { logger } from "../config/logger.js";
+import { withTransaction } from "../db/transaction.js";
+import * as razorpay from "./razorpay.client.js";
+
+// Give up retrying after this many calls; then a person has to look at it (it's logged)
+const MAX_ATTEMPTS = 10;
+
+// Step 1. Returns the new refund's id, or null if this payment already has an active refund.
+export const requestRefund = async (client, paymentId, reason) => {
+  const { rows } = await client.query(
+    `INSERT INTO refunds (payment_id, amount, reason)
+     SELECT id, amount, $2 FROM payments WHERE id = $1 AND status = 'paid'
+     ON CONFLICT (payment_id) WHERE status <> 'failed' DO NOTHING
+     RETURNING id`,
+    [paymentId, reason]
+  );
+  if (rows.length > 0) {
+    logger.info({ refundId: rows[0].id, paymentId, reason }, "Refund requested");
+  }
+  return rows[0]?.id ?? null;
+};
+
+const markPaymentRefunded = (client, refundId) =>
+  client.query(
+    "UPDATE payments SET status = 'refunded', updated_at = NOW() WHERE id = (SELECT payment_id FROM refunds WHERE id = $1)",
+    [refundId]
+  );
+
+// Step 2. Safe to call any number of times, from anywhere, even at the same moment.
+export const processRefund = async (refundId) => {
+  await withTransaction(async (client) => {
+
+    // SKIP LOCKED: if another process is already sending this refund, leave it to them
+    const { rows: [refund] } = await client.query(
+      `SELECT r.id, r.amount, r.status, r.provider_refund_id, r.attempts, p.provider_payment_id
+       FROM refunds r JOIN payments p ON p.id = r.payment_id
+       WHERE r.id = $1
+       FOR UPDATE OF r SKIP LOCKED`,
+      [refundId]
+    );
+    if (!refund || refund.status !== "pending" || refund.provider_refund_id) {
+      return;   // being handled elsewhere, or already accepted by Razorpay
+    }
+
+    try {
+      // A previous attempt may have reached Razorpay even though its answer got lost
+      // (timeout, crash). Ask first, so a retry can never refund the customer twice.
+      const existing = (await razorpay.listRefunds(refund.provider_payment_id))
+        .find((r) => r.status !== "failed");
+
+      const accepted = existing ?? await razorpay.createRefund(refund.provider_payment_id, {
+        amount: refund.amount,
+        receipt: refund.id,                      // our refund id, shown in Razorpay's dashboard
+        notes: { refundId: refund.id }
+      });
+
+      const status = accepted.status === "processed" ? "processed" : accepted.status === "failed" ? "failed" : "pending";
+      await client.query(
+        `UPDATE refunds
+         SET provider_refund_id = $2, status = $3, attempts = attempts + 1, last_error = NULL, updated_at = NOW()
+         WHERE id = $1`,
+        [refund.id, accepted.id, status]
+      );
+      if (status === "processed") {
+        await markPaymentRefunded(client, refund.id);
+      }
+      logger.info({ refundId: refund.id, providerRefundId: accepted.id, status, adopted: Boolean(existing) }, "Refund sent to Razorpay");
+    } catch (err) {
+      // Keep it pending; the job retries. (Recorded in this same transaction, which commits.)
+      await client.query(
+        "UPDATE refunds SET attempts = attempts + 1, last_error = $2, updated_at = NOW() WHERE id = $1",
+        [refund.id, err.message]
+      );
+      const level = refund.attempts + 1 >= MAX_ATTEMPTS ? "error" : "warn";
+      logger[level]({ err, refundId: refund.id, attempt: refund.attempts + 1 }, "Refund call to Razorpay failed; will retry");
+    }
+  });
+};
+
+// For the background job: send refunds that Razorpay hasn't accepted yet
+export const retryPendingRefunds = async ({ maxRefunds = 20 } = {}) => {
+  const { rows } = await pool.query(
+    `SELECT id FROM refunds
+     WHERE status = 'pending' AND provider_refund_id IS NULL AND attempts < $1
+     ORDER BY created_at
+     LIMIT $2`,
+    [MAX_ATTEMPTS, maxRefunds]
+  );
+  for (const { id } of rows) {
+    await processRefund(id);
+  }
+  return rows.length;
+};
+
+// Webhooks: refund.processed / refund.failed (and refund.created) from Razorpay.
+// Runs inside the webhook's transaction.
+export const recordRefundEvent = async (client, eventType, entity) => {
+  if (!entity?.id) {
+    return;
+  }
+
+  // Normally we stored Razorpay's id when it accepted the refund. If that answer was lost,
+  // match the event to our still-unsent refund for the same payment instead.
+  const { rows: [refund] } = await client.query(
+    `SELECT r.id FROM refunds r
+     WHERE r.provider_refund_id = $1
+        OR (r.provider_refund_id IS NULL AND r.status = 'pending'
+            AND r.payment_id = (SELECT id FROM payments WHERE provider_payment_id = $2))
+     ORDER BY (r.provider_refund_id = $1) DESC NULLS LAST
+     LIMIT 1
+     FOR UPDATE`,
+    [entity.id, entity.payment_id]
+  );
+  if (!refund) {
+    return;   // a refund made by hand in Razorpay's dashboard, not by us
+  }
+
+  // Webhooks can arrive out of order (e.g. "created" after "processed"), so a status only
+  // ever moves forward: pending → processed / failed. "refund.created" just records the id.
+  const status = eventType === "refund.processed" ? "processed" : eventType === "refund.failed" ? "failed" : null;
+  await client.query(
+    `UPDATE refunds
+     SET provider_refund_id = $2,
+         status = CASE WHEN status = 'pending' AND $3::text IS NOT NULL THEN $3 ELSE status END,
+         updated_at = NOW()
+     WHERE id = $1`,
+    [refund.id, entity.id, status]
+  );
+
+  if (status === "processed") {
+    await markPaymentRefunded(client, refund.id);
+    logger.info({ refundId: refund.id, providerRefundId: entity.id }, "Refund processed: the customer has their money back");
+  }
+  if (status === "failed") {
+    logger.error({ refundId: refund.id, providerRefundId: entity.id }, "Razorpay could not complete a refund: needs a person to look at it");
+  }
+};

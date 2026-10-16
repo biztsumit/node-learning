@@ -5,6 +5,7 @@ import { withTransaction } from "../db/transaction.js";
 import { AppError } from "../utils/app-error.js";
 import { canChangeStatus } from "../utils/order-status.js";
 import { getAddress } from "./address.services.js";
+import { processRefund, requestRefund } from "./refund.services.js";
 
 // ---------- Reading orders ----------
 
@@ -20,6 +21,10 @@ const toOrder = (order, items, { includeCustomer }) => ({
     ? new Date(order.created_at.getTime() + env.ORDER_PAYMENT_TIMEOUT_MINUTES * 60_000)
     : null,
   cancelReason: order.cancel_reason,
+  // The latest refund for this order, if any (amount in rupees, like totalAmount)
+  refund: order.refund
+    ? { status: order.refund.status, amount: order.refund.amount / 100, requestedAt: order.refund.requested_at }
+    : null,
   shippingAddress: order.shipping_address,
   ...(includeCustomer && {
     customer: { id: order.user_id, name: order.user_name, email: order.user_email }
@@ -47,6 +52,11 @@ export const getOrderById = async (orderId, { userId } = {}) => {
 
   const { rows: orders } = await pool.query(
     `SELECT o.id, o.status, o.total_amount, o.created_at, o.updated_at, o.shipping_address, o.cancel_reason,
+            (SELECT json_build_object('status', r.status, 'amount', r.amount, 'requested_at', r.created_at)
+             FROM refunds r JOIN payments p ON p.id = r.payment_id
+             WHERE p.order_id = o.id
+             ORDER BY r.created_at DESC
+             LIMIT 1) AS refund,
             u.id AS user_id, u.name AS user_name, u.email AS user_email
      FROM orders o
      JOIN users u ON u.id = o.user_id
@@ -312,7 +322,7 @@ export const cancelOrder = async (userId, orderId) => {
 // An admin moving an order along: pending → paid → shipped → delivered, or cancelling it
 export const changeOrderStatus = async (orderId, newStatus) => {
 
-  await withTransaction(async (client) => {
+  const refundId = await withTransaction(async (client) => {
 
     const order = await lockOrder(client, orderId);
 
@@ -324,7 +334,25 @@ export const changeOrderStatus = async (orderId, newStatus) => {
     }
 
     await applyStatus(client, orderId, newStatus, { cancelReason: "admin" });
+
+    // Cancelling an order the customer already paid for: give the money back.
+    // (Orders marked "paid" by hand, e.g. cash, have no online payment and get no refund.)
+    if (order.status === "paid" && newStatus === "cancelled") {
+      const { rows: [payment] } = await client.query(
+        "SELECT id FROM payments WHERE order_id = $1 AND status = 'paid' LIMIT 1",
+        [orderId]
+      );
+      if (payment) {
+        return requestRefund(client, payment.id, "order_cancelled");
+      }
+    }
+    return null;
   });
+
+  // After the commit: send the refund to Razorpay (on failure the job retries it)
+  if (refundId) {
+    await processRefund(refundId);
+  }
 
   return getOrderById(orderId);
 };

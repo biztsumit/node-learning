@@ -389,7 +389,7 @@ export const openApiDocument = {
       parameters: [pathId("id", "Order id")],
       patch: {
         tags: ["Admin"], summary: "Move an order to its next status", ...LOGGED_IN,
-        description: "Allowed: pending → paid / cancelled, paid → shipped / cancelled, shipped → delivered. Cancelling restores stock.",
+        description: "Allowed: pending → paid / cancelled, paid → shipped / cancelled, shipped → delivered. Cancelling restores stock; cancelling a PAID order also refunds the customer through Razorpay automatically.",
         requestBody: jsonBody(updateOrderStatusSchema),
         responses: { ...ok("Updated order", ref("Order")), ...errors(400, 401, 403, 404, 409) }
       }
@@ -399,7 +399,7 @@ export const openApiDocument = {
     "/webhooks/razorpay": {
       post: {
         tags: ["Webhooks"], summary: "Razorpay payment events", ...PUBLIC,
-        description: "Signed by Razorpay with the webhook secret (`X-Razorpay-Signature`). Handles `payment.captured`, `order.paid` and `payment.failed`; each event id is processed once.",
+        description: "Signed by Razorpay with the webhook secret (`X-Razorpay-Signature`). Handles `payment.captured`, `order.paid`, `payment.failed`, and `refund.created` / `refund.processed` / `refund.failed`; each event id is processed once.",
         parameters: [
           { name: "X-Razorpay-Signature", in: "header", required: true, schema: { type: "string" } },
           { name: "X-Razorpay-Event-Id", in: "header", required: false, schema: { type: "string" } }
@@ -540,6 +540,20 @@ export const openApiDocument = {
             description: "Pending orders only: pay before this time, or the order is cancelled and its stock released"
           },
           cancelReason: { type: ["string", "null"], enum: ["customer", "admin", "payment_timeout", null] },
+          refund: {
+            description: "The latest refund, if the order was paid and then cancelled (sent to Razorpay automatically)",
+            anyOf: [
+              {
+                type: "object",
+                properties: {
+                  status: { type: "string", enum: ["pending", "processed", "failed"] },
+                  amount: { type: "integer", description: "Whole rupees" },
+                  requestedAt: { type: "string", format: "date-time" }
+                }
+              },
+              { type: "null" }
+            ]
+          },
           updatedAt: { type: "string", format: "date-time" },
           shippingAddress: { description: "A copy of the address at checkout time", anyOf: [{ type: "object" }, { type: "null" }] },
           items: {

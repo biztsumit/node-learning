@@ -3,6 +3,7 @@ import { logger } from "../config/logger.js";
 import { withTransaction } from "../db/transaction.js";
 import { AppError } from "../utils/app-error.js";
 import * as razorpay from "./razorpay.client.js";
+import { processRefund, recordRefundEvent, requestRefund } from "./refund.services.js";
 
 // Our prices are whole rupees; Razorpay works in paise (1 rupee = 100 paise)
 const toPaise = (rupees) => rupees * 100;
@@ -131,12 +132,13 @@ const recordSuccessfulPayment = async (client, { providerOrderId, providerPaymen
   }
 
   // e.g. the order was cancelled while the customer was on the payment screen:
-  // the money arrived, but the order isn't active any more, so it has to be refunded.
+  // the money arrived, but the order isn't active any more, so it's refunded automatically.
   logger.warn(
     { providerPaymentId, orderId: payment.order_id, orderStatus: order.status, amount: payment.amount },
-    "Payment received for an inactive order: refund needed"
+    "Payment received for an inactive order: refunding it"
   );
-  return { result: "needs_refund", orderId: payment.order_id };
+  const refundId = await requestRefund(client, payment.id, "paid_after_cancellation");
+  return { result: "needs_refund", orderId: payment.order_id, refundId };
 };
 
 // ---------- Step 2: the browser reports "payment done" ----------
@@ -168,9 +170,13 @@ export const confirmPayment = async (userId, orderId, { razorpayOrderId, razorpa
     });
   });
 
-  // Thrown after the transaction, so the payment itself stays recorded as paid
+  // After the transaction: send the refund to Razorpay, then tell the customer.
+  // (Thrown after the transaction, so the payment and refund records stay saved.)
   if (outcome.result === "needs_refund") {
-    throw new AppError(409, "This order was cancelled before the payment completed. The payment will be refunded");
+    if (outcome.refundId) {
+      await processRefund(outcome.refundId);
+    }
+    throw new AppError(409, "This order was cancelled before the payment completed. The payment is being refunded");
   }
 };
 
@@ -188,6 +194,9 @@ export const handleRazorpayWebhook = async (rawBody, signature, eventId) => {
   } catch {
     throw new AppError(400, "Webhook body is not valid JSON");
   }
+
+  // Refunds to send to Razorpay once this event's changes are committed
+  const refundsToSend = [];
 
   await withTransaction(async (client) => {
 
@@ -210,12 +219,21 @@ export const handleRazorpayWebhook = async (rawBody, signature, eventId) => {
       case "payment.captured":
       case "order.paid":
         if (payment) {
-          await recordSuccessfulPayment(client, {
+          const outcome = await recordSuccessfulPayment(client, {
             providerOrderId: payment.order_id,
             providerPaymentId: payment.id,
             amount: payment.amount
           });
+          if (outcome.refundId) {
+            refundsToSend.push(outcome.refundId);
+          }
         }
+        break;
+
+      case "refund.created":
+      case "refund.processed":
+      case "refund.failed":
+        await recordRefundEvent(client, event.event, event.payload?.refund?.entity);
         break;
 
       case "payment.failed":
@@ -233,4 +251,10 @@ export const handleRazorpayWebhook = async (rawBody, signature, eventId) => {
         break;
     }
   });
+
+  // Not awaited: Razorpay expects a quick reply to webhooks. If sending fails,
+  // the refund stays pending and the background job retries it.
+  for (const refundId of refundsToSend) {
+    processRefund(refundId).catch((err) => logger.error({ err, refundId }, "Could not send refund"));
+  }
 };

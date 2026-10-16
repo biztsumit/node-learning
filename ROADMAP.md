@@ -65,7 +65,7 @@ Ordered so each phase builds on the previous one. ⭐ = recommended next.
 - [x] 8.1 CI: GitHub Actions runs `npm test` on every push (PostgreSQL 18 service); Render deploys only when green
 - [x] 8.2 Expire unpaid orders: a background job cancels `pending` orders after 3 days (configurable) and releases their stock (`FOR UPDATE SKIP LOCKED`)
 - [x] 8.3 Idempotency keys (`Idempotency-Key` header) for checkout and add-to-cart: retries replay the first response instead of repeating the action
-- [ ] 8.4 Automatic Razorpay refunds for "paid but cancelled" orders, with a `refunded` status
+- [x] 8.4 Automatic Razorpay refunds when a paid order is cancelled or money arrives late; retried by the job, tracked by webhooks
 - [ ] 8.5 Human-friendly order numbers (e.g. `ORD-7K3M9Q`): random, not counting, since UUIDs are hard to read out on a support call
 
 ## Phase 9 — Background work, Redis and email
