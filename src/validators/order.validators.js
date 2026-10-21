@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { idSchema, paginationFields } from "./common.validators.js";
+import { idSchema, cursorPaginationFields, pageOrCursor } from "./common.validators.js";
 import { ORDER_STATUSES } from "../utils/order-status.js";
 import { ORDER_NUMBER_PATTERN } from "../utils/order-number.js";
 import { couponCodeSchema } from "./coupon.validators.js";
@@ -27,18 +27,20 @@ export const checkoutSchema = z.object({
   couponCode: couponCodeSchema.optional()
 });
 
-// GET /orders?status=pending&page=1
-export const orderListQuerySchema = z.object({
+// GET /orders?status=pending&page=1  (or &cursor=<nextCursor>)
+const orderListFields = {
   status: statusSchema.optional(),
-  ...paginationFields
-});
+  ...cursorPaginationFields
+};
+export const orderListQuerySchema = z.object(orderListFields).refine(...pageOrCursor);
 
 // GET /admin/orders?userId=<uuid>&status=paid
-export const adminOrderListQuerySchema = orderListQuerySchema.extend({
+export const adminOrderListQuerySchema = z.object({
+  ...orderListFields,
   userId: idSchema("userId").optional(),
   // A customer quoting their order number on the phone
   orderNumber: orderNumberSchema.optional()
-});
+}).refine(...pageOrCursor);
 
 // PATCH /admin/orders/:id/status
 export const updateOrderStatusSchema = z.object({

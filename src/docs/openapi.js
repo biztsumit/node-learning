@@ -572,7 +572,14 @@ export const openApiDocument = {
       },
       Pagination: {
         type: "object",
-        properties: { page: { type: "integer" }, limit: { type: "integer" }, total: { type: "integer" }, totalPages: { type: "integer" } }
+        description: "Products, orders and the stock ledger can also be paged with a cursor: send the `nextCursor` you got back as `?cursor=` (instead of `page`) to get the following page. Cursor pages are fast at any depth and never skip or repeat items when new ones arrive; they have no `page`/`total`/`totalPages`. `nextCursor` is null on the last page.",
+        properties: {
+          page: { type: "integer", description: "Page-number paging only" },
+          limit: { type: "integer" },
+          total: { type: "integer", description: "Page-number paging only" },
+          totalPages: { type: "integer", description: "Page-number paging only" },
+          nextCursor: { type: ["string", "null"], description: "Pass as ?cursor= for the next page (lists that support cursors)" }
+        }
       },
       User: {
         type: "object",

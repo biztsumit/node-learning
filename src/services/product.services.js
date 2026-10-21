@@ -9,6 +9,7 @@ import { enqueue } from "../jobs/queue.js";
 import { AppError } from "../utils/app-error.js";
 import { listVariants } from "./variant.services.js";
 import { setStockContext } from "../db/stock-context.js";
+import { afterCursor, cursorPage, timestampKey } from "../utils/cursor.js";
 
 // LEFT JOIN keeps products that have no category (their category columns come back as NULL)
 const SELECT_PRODUCTS = `
@@ -50,16 +51,32 @@ const toProduct = (row) => ({
 });
 
 // ORDER BY can't use $1 placeholders, so sort options come from this fixed list only.
-// Each ends with p.id so products with the same price/name always come in the same order.
-const SORT_OPTIONS = {
-  newest: "p.created_at DESC, p.id DESC",
-  price_asc: "p.price ASC, p.id ASC",
-  price_desc: "p.price DESC, p.id DESC",
-  name_asc: "p.name ASC, p.id ASC",
+// Each is a list of columns ending with p.id, so every product has a unique position
+// (products with the same price always come in the same order), which cursors rely on.
+// value(row): where a page's last row keeps that column's value, for the next cursor.
+const ID = { column: "p.id", type: "uuid", value: (row) => row.id };
+const CREATED = { column: "p.created_at", type: "timestamptz", value: (row) => row.created_key };
+
+const SORTS = {
+  newest: { direction: "desc", keys: [CREATED, ID] },
+  price_asc: { direction: "asc", keys: [{ column: "p.price", type: "integer", value: (row) => row.price }, ID] },
+  price_desc: { direction: "desc", keys: [{ column: "p.price", type: "integer", value: (row) => row.price }, ID] },
+  name_asc: { direction: "asc", keys: [{ column: "p.name", type: "varchar", value: (row) => row.name }, ID] },
   // Best average first; with equal averages, the one with more reviews wins
-  rating_desc: "p.rating_avg DESC, p.rating_count DESC, p.id DESC",
+  rating_desc: {
+    direction: "desc",
+    keys: [
+      { column: "p.rating_avg", type: "numeric", value: (row) => row.rating_avg },
+      { column: "p.rating_count", type: "integer", value: (row) => row.rating_count },
+      ID
+    ]
+  },
   // Best match first ({relevance} is filled in by findProducts). Ties: newest first.
-  relevance: "{relevance} DESC, p.created_at DESC, p.id DESC"
+  // The score is a "real"; its text form converts back to exactly the same number.
+  relevance: {
+    direction: "desc",
+    keys: [{ column: "({relevance})", type: "real", value: (row) => row.relevance_key }, CREATED, ID]
+  }
 };
 
 // -word, "exact phrase" or "a or b": the person wants precise rules, not "close enough"
@@ -68,7 +85,9 @@ const usesSearchSyntax = (text) => /(^|\s)-\S|"|\sor\s/i.test(text);
 // In LIKE patterns, % and _ are wildcards. Escape them so searching "50%" means the text "50%".
 const escapeLike = (text) => text.replace(/[\\%_]/g, (char) => `\\${char}`);
 
-export const findProducts = async ({ search, category, minPrice, maxPrice, inStock, sort, page, limit }) => {
+// Two ways to page through: ?page=3 (with totals, for page-number links) or
+// ?cursor=<nextCursor> (no totals, fast at any depth: for "load more" and infinite scroll)
+export const findProducts = async ({ search, category, minPrice, maxPrice, inStock, sort, page, cursor, limit }) => {
 
   // Build the WHERE clause from only the filters that were given
   const conditions = [];
@@ -80,8 +99,9 @@ export const findProducts = async ({ search, category, minPrice, maxPrice, inSto
     return `$${values.length}`;
   };
 
-  // How well each product matches the search, used by sort=relevance
-  let relevance = "0";
+  // How well each product matches the search, used by sort=relevance.
+  // Not a bare "0" without a search: ORDER BY 0 means "the 0th column" to PostgreSQL (an error).
+  let relevance = "0::real";
 
   if (search) {
     const text = addValue(search);
@@ -120,31 +140,57 @@ export const findProducts = async ({ search, category, minPrice, maxPrice, inSto
     conditions.push(inStock ? "p.stock > 0" : "p.stock = 0");
   }
 
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   // No sort chosen: best match first when searching, otherwise newest first
-  const order = sort ?? (search ? "relevance" : "newest");
-  const offset = (page - 1) * limit;
+  const name = sort ?? (search ? "relevance" : "newest");
+  const chosen = {
+    name,
+    direction: SORTS[name].direction,
+    keys: SORTS[name].keys.map((key) => ({ ...key, column: key.column.replace("{relevance}", relevance) }))
+  };
+  const orderBy = chosen.keys.map((key) => `${key.column} ${chosen.direction.toUpperCase()}`).join(", ");
 
-  // Run both queries at the same time: one page of products, and the total count
+  // The filters only: the total count must not depend on where the cursor is
+  const filterWhere = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const filterValues = [...values];
+
+  if (cursor !== undefined) {
+    conditions.push(afterCursor(chosen, cursor, addValue));
+  }
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const offset = cursor === undefined ? ((page ?? 1) - 1) * limit : 0;
+
+  // limit + 1: the extra row (if any) tells us there's a next page
+  const rowsQuery = pool.query(
+    `${SELECT_PRODUCTS.replace("FROM products p", `, ${timestampKey("p.created_at")} AS created_key, (${relevance})::text AS relevance_key
+  FROM products p`)} ${where}
+     ORDER BY ${orderBy}
+     LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+    [...values, limit + 1, offset]
+  );
+
+  // With a cursor there's no COUNT(*): counting every match is the slow part of a huge list
+  if (cursor !== undefined) {
+    const { rows, nextCursor } = cursorPage((await rowsQuery).rows, limit, chosen);
+    return { products: rows.map(toProduct), pagination: { limit, nextCursor } };
+  }
+
+  // Page numbers: run both queries at the same time, one page of products and the total count
   const [rowsResult, countResult] = await Promise.all([
-    pool.query(
-      `${SELECT_PRODUCTS} ${where}
-       ORDER BY ${SORT_OPTIONS[order].replace("{relevance}", relevance)}
-       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
-      [...values, limit, offset]
-    ),
-    pool.query(`SELECT COUNT(*)::int AS total FROM products p ${where}`, values)
+    rowsQuery,
+    pool.query(`SELECT COUNT(*)::int AS total FROM products p ${filterWhere}`, filterValues)
   ]);
-
   const total = countResult.rows[0].total;
+  const { rows, nextCursor } = cursorPage(rowsResult.rows, limit, chosen);
 
   return {
-    products: rowsResult.rows.map(toProduct),
+    products: rows.map(toProduct),
     pagination: {
-      page,
+      page: page ?? 1,
       limit,
       total,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / limit),
+      // Lets a client switch to cursors from here on
+      nextCursor
     }
   };
 };

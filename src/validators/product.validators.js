@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { idSchema, MAX_DB_INTEGER, paginationFields } from "./common.validators.js";
+import { idSchema, MAX_DB_INTEGER, cursorPaginationFields, pageOrCursor } from "./common.validators.js";
 
 export const productSchema = z.object({
   name: z
@@ -66,8 +66,9 @@ export const productListQuerySchema = z
       })
       // Left out: "relevance" when searching, "newest" otherwise
       .optional(),
-    ...paginationFields
+    ...cursorPaginationFields
   })
+  .refine(...pageOrCursor)
   .refine(
     (query) => query.minPrice === undefined || query.maxPrice === undefined || query.minPrice <= query.maxPrice,
     { error: "minPrice can't be greater than maxPrice", path: ["minPrice"] }

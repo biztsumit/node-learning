@@ -12,6 +12,7 @@ import { processRefund, requestRefund } from "./refund.services.js";
 import { optionsLabel } from "./variant.services.js";
 import { releaseCoupon, recordRedemption, reserveCoupon } from "./coupon.services.js";
 import { setStockContext } from "../db/stock-context.js";
+import { pagedQuery, timestampKey } from "../utils/cursor.js";
 
 // ---------- Reading orders ----------
 
@@ -103,8 +104,18 @@ export const getOrderByNumber = async (orderNumber, { userId } = {}) => {
   return rows[0] && getOrderById(rows[0].id, { userId });
 };
 
+// Newest first. The id breaks ties between orders placed in the same microsecond.
+const ORDER_SORT = {
+  name: "orders",
+  direction: "desc",
+  keys: [
+    { column: "o.created_at", type: "timestamptz", value: (row) => row.created_key },
+    { column: "o.id", type: "uuid", value: (row) => row.id }
+  ]
+};
+
 // A page of orders, newest first. Same rule: pass userId for one customer's orders only.
-export const listOrders = async ({ userId, status, orderNumber, page, limit }, { includeCustomer = false } = {}) => {
+export const listOrders = async ({ userId, status, orderNumber, page, cursor, limit }, { includeCustomer = false } = {}) => {
 
   const conditions = [];
   const values = [];
@@ -123,30 +134,18 @@ export const listOrders = async ({ userId, status, orderNumber, page, limit }, {
     conditions.push(`o.order_number = ${addValue(orderNumber)}`);
   }
 
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-  const offset = (page - 1) * limit;
-
-  const [rowsResult, countResult] = await Promise.all([
-    pool.query(
-      `SELECT o.id, o.order_number, o.status, o.total_amount, o.created_at,
+  const { rows, pagination } = await pagedQuery(pool, {
+    select: `SELECT o.id, o.order_number, o.status, o.total_amount, o.created_at, ${timestampKey("o.created_at")} AS created_key,
               u.id AS user_id, u.name AS user_name, u.email AS user_email,
               (SELECT COALESCE(SUM(oi.quantity), 0)::int
                FROM order_items oi
-               WHERE oi.order_id = o.id) AS item_count
-       FROM orders o
-       JOIN users u ON u.id = o.user_id
-       ${where}
-       ORDER BY o.created_at DESC, o.id DESC
-       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
-      [...values, limit, offset]
-    ),
-    pool.query(`SELECT COUNT(*)::int AS total FROM orders o ${where}`, values)
-  ]);
-
-  const total = countResult.rows[0].total;
+               WHERE oi.order_id = o.id) AS item_count`,
+    from: "FROM orders o JOIN users u ON u.id = o.user_id",
+    conditions, values, addValue, sort: ORDER_SORT, page, cursor, limit
+  });
 
   return {
-    orders: rowsResult.rows.map((row) => ({
+    orders: rows.map((row) => ({
       id: row.id,
       orderNumber: row.order_number,
       status: row.status,
@@ -157,12 +156,7 @@ export const listOrders = async ({ userId, status, orderNumber, page, limit }, {
         customer: { id: row.user_id, name: row.user_name, email: row.user_email }
       })
     })),
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit)
-    }
+    pagination
   };
 };
 

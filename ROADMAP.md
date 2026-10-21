@@ -82,7 +82,7 @@ Ordered so each phase builds on the previous one. ⭐ = recommended next.
 - [x] 10.3 Real search: PostgreSQL full-text search with ranking, typo-tolerant matching (`pg_trgm`)
 - [x] 10.4 Coupons and discounts (percent / fixed, expiry, usage limits — safe under concurrency)
 - [x] 10.5 Wishlist, and a stock-movement ledger (every stock change recorded with its reason)
-- [ ] 10.6 Cursor pagination for very large lists
+- [x] 10.6 Cursor pagination for very large lists
 
 ## Phase 11 — Admin insights
 

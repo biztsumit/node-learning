@@ -39,3 +39,17 @@ export const paginationFields = {
     .max(100, { error: "limit must be at most 100" })
     .default(20)
 };
+
+// For long lists that also support cursor pagination: ?cursor=<nextCursor from the last page>.
+// page has no default here, so we can tell "page wasn't sent" (the service uses 1).
+export const cursorPaginationFields = {
+  page: paginationFields.page.unwrap().optional(),
+  limit: paginationFields.limit,
+  cursor: z.string().max(1000, { error: "cursor is too long" }).optional()
+};
+
+// Add to a list schema using cursorPaginationFields: page numbers and cursors don't mix
+export const pageOrCursor = [
+  (query) => query.page === undefined || query.cursor === undefined,
+  { error: "Use either page or cursor, not both", path: ["cursor"] }
+];

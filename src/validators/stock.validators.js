@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { idSchema, paginationFields } from "./common.validators.js";
+import { idSchema, cursorPaginationFields, pageOrCursor } from "./common.validators.js";
 
 // For /wishlist/:productId
 export const productIdParamSchema = z.object({
@@ -40,5 +40,5 @@ export const stockMovementListQuerySchema = z.object({
   variantId: idSchema("variantId").optional(),
   orderId: idSchema("orderId").optional(),
   reason: z.enum(MOVEMENT_REASONS, { error: `reason must be one of: ${MOVEMENT_REASONS.join(", ")}` }).optional(),
-  ...paginationFields
-});
+  ...cursorPaginationFields
+}).refine(...pageOrCursor);

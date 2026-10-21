@@ -16,7 +16,9 @@ describe("browsing products (public)", () => {
     const res = await api().get("/products?limit=2&page=2&sort=price_asc").expect(200);
 
     assert.deepEqual(res.body.data.map((p) => p.price), [300, 400]);
-    assert.deepEqual(res.body.pagination, { page: 2, limit: 2, total: 5, totalPages: 3 });
+    const { nextCursor, ...pageInfo } = res.body.pagination;
+    assert.deepEqual(pageInfo, { page: 2, limit: 2, total: 5, totalPages: 3 });
+    assert.equal(typeof nextCursor, "string");   // there's a page 3
   });
 
   it("filters by price range, stock and category", async () => {
@@ -105,6 +107,11 @@ describe("searching products", () => {
     // Choosing another sort still works while searching
     const byName = await api().get("/products?search=cotton&sort=name_asc").expect(200);
     assert.deepEqual(byName.body.data.map((p) => p.name), ["Classic Cotton Shirt", "Desk Lamp"].sort());
+  });
+
+  it("accepts sort=relevance without a search (newest first)", async () => {
+    const res = await api().get("/products?sort=relevance").expect(200);
+    assert.equal(res.body.data[0].name, "Desk Lamp");
   });
 
   it("understands search-box syntax", async () => {

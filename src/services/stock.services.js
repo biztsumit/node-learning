@@ -5,6 +5,7 @@ import { withTransaction } from "../db/transaction.js";
 import { AppError } from "../utils/app-error.js";
 import { setStockContext } from "../db/stock-context.js";
 import { optionsLabel } from "./variant.services.js";
+import { pagedQuery, timestampKey } from "../utils/cursor.js";
 
 // POST /admin/stock-movements: "10 arrived", "2 broke". A CHANGE (+10 / -2), not a new total:
 // stock = stock + change works even if a checkout sells some at the same moment,
@@ -34,16 +35,21 @@ export const adjustStock = ({ variantId, change, reason, note }, adminId) =>
     return toMovement(movement);
   });
 
-const SELECT_MOVEMENTS = `
+const MOVEMENT_COLUMNS = `
   SELECT m.id, m.variant_id, m.product_id, m.change, m.stock_after, m.reason, m.note, m.created_at,
+         ${timestampKey("m.created_at")} AS created_key,
          m.order_id, o.order_number, m.user_id, u.name AS user_name,
-         p.name AS product_name, v.options, v.sku
+         p.name AS product_name, v.options, v.sku`;
+
+const MOVEMENT_FROM = `
   FROM stock_movements m
   LEFT JOIN products p ON p.id = m.product_id
   LEFT JOIN product_variants v ON v.id = m.variant_id
   LEFT JOIN orders o ON o.id = m.order_id
   LEFT JOIN users u ON u.id = m.user_id
 `;
+
+const SELECT_MOVEMENTS = `${MOVEMENT_COLUMNS} ${MOVEMENT_FROM}`;
 
 const toMovement = (row) => ({
   id: row.id,
@@ -63,7 +69,17 @@ const toMovement = (row) => ({
 });
 
 // GET /admin/stock-movements?productId=&variantId=&orderId=&reason=  (newest first)
-export const listStockMovements = async ({ productId, variantId, orderId, reason, page, limit }) => {
+const MOVEMENT_SORT = {
+  name: "stock",
+  direction: "desc",
+  keys: [
+    { column: "m.created_at", type: "timestamptz", value: (row) => row.created_key },
+    { column: "m.id", type: "uuid", value: (row) => row.id }
+  ]
+};
+
+// The ledger only ever grows: cursor paging keeps "load older" fast however long it gets
+export const listStockMovements = async ({ productId, variantId, orderId, reason, page, cursor, limit }) => {
   const conditions = [];
   const values = [];
   const addValue = (value) => {
@@ -83,20 +99,10 @@ export const listStockMovements = async ({ productId, variantId, orderId, reason
   if (reason !== undefined) {
     conditions.push(`m.reason = ${addValue(reason)}`);
   }
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-
-  const [rowsResult, countResult] = await Promise.all([
-    pool.query(
-      `${SELECT_MOVEMENTS} ${where}
-       ORDER BY m.created_at DESC, m.id DESC
-       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
-      [...values, limit, (page - 1) * limit]
-    ),
-    pool.query(`SELECT COUNT(*)::int AS total FROM stock_movements m ${where}`, values)
-  ]);
-  const total = countResult.rows[0].total;
-  return {
-    movements: rowsResult.rows.map(toMovement),
-    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
-  };
+  const { rows, pagination } = await pagedQuery(pool, {
+    select: MOVEMENT_COLUMNS,
+    from: MOVEMENT_FROM,
+    conditions, values, addValue, sort: MOVEMENT_SORT, page, cursor, limit
+  });
+  return { movements: rows.map(toMovement), pagination };
 };
