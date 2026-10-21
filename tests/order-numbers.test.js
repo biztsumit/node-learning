@@ -100,11 +100,11 @@ describe("order numbers", () => {
     const { rows: [{ user_id }] } = await pool.query("SELECT user_id FROM orders WHERE id = $1", [order.id]);
 
     await assert.rejects(
-      pool.query("INSERT INTO orders (user_id, total_amount, order_number) VALUES ($1, 1, $2)", [user_id, order.orderNumber]),
+      pool.query("INSERT INTO orders (user_id, subtotal_amount, total_amount, order_number) VALUES ($1, 1, 1, $2)", [user_id, order.orderNumber]),
       { code: "23505" }
     );
     await assert.rejects(
-      pool.query("INSERT INTO orders (user_id, total_amount) VALUES ($1, 1)", [user_id]),
+      pool.query("INSERT INTO orders (user_id, subtotal_amount, total_amount) VALUES ($1, 1, 1)", [user_id]),
       { code: "23502" }
     );
   });

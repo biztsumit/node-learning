@@ -22,7 +22,31 @@ const products = [
   }
 ];
 
+// Demo discount codes, one of each kind
+const coupons = [
+  { code: "WELCOME10", description: "10% off your order, up to ₹500", type: "percent", value: 10, maxDiscount: 500, minOrder: 0 },
+  { code: "FLAT200", description: "₹200 off orders of ₹1,500 or more", type: "fixed", value: 200, maxDiscount: null, minOrder: 1500 }
+];
+
+// Safe to run again and again: ON CONFLICT skips codes that already exist,
+// so databases seeded before coupons existed get them too
+const seedCoupons = async () => {
+  let added = 0;
+  for (const c of coupons) {
+    const { rowCount } = await pool.query(
+      `INSERT INTO coupons (code, description, discount_type, discount_value, max_discount, min_order_amount)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (code) DO NOTHING`,
+      [c.code, c.description, c.type, c.value, c.maxDiscount, c.minOrder]
+    );
+    added += rowCount;
+  }
+  console.log(`Added ${added} demo coupons`);
+};
+
 const seed = async () => {
+
+  await seedCoupons();
 
   const { rows } = await pool.query("SELECT COUNT(*)::int AS count FROM products");
 

@@ -71,7 +71,7 @@ export const getProductBySlug = async (req, res) => {
 export const addProduct = async (req, res) => {
 
   const product = await productService
-    .createProduct(req.body)
+    .createProduct(req.body, req.user.id)
     .catch(handleDbError);
 
   res.status(201).json({
@@ -83,7 +83,7 @@ export const addProduct = async (req, res) => {
 export const updateProduct = async (req, res) => {
 
   const product = await productService
-    .updateProductById(req.params.id, req.body)
+    .updateProductById(req.params.id, req.body, req.user.id)
     .catch(handleDbError);
 
   if (!product) {

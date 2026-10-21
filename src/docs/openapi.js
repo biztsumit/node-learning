@@ -11,6 +11,8 @@ import { createVariantSchema, updateVariantSchema } from "../validators/variant.
 import { createAddressSchema, updateAddressSchema } from "../validators/address.validators.js";
 import { checkoutSchema, orderListQuerySchema, adminOrderListQuerySchema, updateOrderStatusSchema, orderNumberParamSchema } from "../validators/order.validators.js";
 import { verifyPaymentSchema } from "../validators/payment.validators.js";
+import { stockAdjustmentSchema, stockMovementListQuerySchema } from "../validators/stock.validators.js";
+import { cartQuerySchema, couponListQuerySchema, createCouponSchema, updateCouponSchema } from "../validators/coupon.validators.js";
 import { productImageSchema } from "../validators/upload.validators.js";
 import { createReviewSchema, updateReviewSchema, reviewListQuerySchema } from "../validators/review.validators.js";
 import { ORDER_STATUSES } from "../utils/order-status.js";
@@ -331,6 +333,47 @@ export const openApiDocument = {
         responses: { ...ok("Signed upload permission", ref("ImageUpload")), ...errors(401, 403, 503) }
       }
     },
+    "/admin/coupons": {
+      get: {
+        tags: ["Admin"], summary: "List coupons (newest first)", ...LOGGED_IN,
+        parameters: queryParams(couponListQuerySchema),
+        responses: { ...ok("A page of coupons", { type: "array", items: ref("Coupon") }, { pagination: true }), ...errors(400, 401, 403) }
+      },
+      post: {
+        tags: ["Admin"], summary: "Create a coupon", ...LOGGED_IN,
+        description: "percent: `discountValue` 1-100, optionally capped by `maxDiscount`. fixed: `discountValue` rupees off. A discount never brings an order below ₹1. By default each customer can use a coupon once (`perUserLimit`; null = unlimited).",
+        requestBody: jsonBody(createCouponSchema),
+        responses: { ...ok("Created", ref("Coupon"), { status: 201 }), ...errors(400, 401, 403, 409) }
+      }
+    },
+    "/admin/coupons/{id}": {
+      parameters: [pathId("id", "Coupon id")],
+      get: { tags: ["Admin"], summary: "Get a coupon", ...LOGGED_IN, responses: { ...ok("Coupon", ref("Coupon")), ...errors(401, 403, 404) } },
+      patch: {
+        tags: ["Admin"], summary: "Change a coupon (send only what changes; null clears a limit)", ...LOGGED_IN,
+        requestBody: jsonBody(updateCouponSchema),
+        responses: { ...ok("Updated", ref("Coupon")), ...errors(400, 401, 403, 404, 409) }
+      },
+      delete: {
+        tags: ["Admin"], summary: "Delete a coupon nobody has used", ...LOGGED_IN,
+        description: "409 once it has been used: set `isActive` to false instead.",
+        responses: { ...message("Deleted"), ...errors(401, 403, 404, 409) }
+      }
+    },
+    "/admin/stock-movements": {
+      get: {
+        tags: ["Admin"], summary: "The stock ledger: every stock change, newest first", ...LOGGED_IN,
+        description: "Every change is recorded by the database itself, whatever caused it: checkout (`order_placed`), cancellation (`order_cancelled`), admin edits (`initial`, `correction`), adjustments below, or SQL run by hand (`manual`).",
+        parameters: queryParams(stockMovementListQuerySchema),
+        responses: { ...ok("A page of movements", { type: "array", items: ref("StockMovement") }, { pagination: true }), ...errors(400, 401, 403) }
+      },
+      post: {
+        tags: ["Admin"], summary: "Adjust a variant's stock, with a reason", ...LOGGED_IN,
+        description: "Send the CHANGE (+10 arrived, -2 broken), not a new total: a sale happening at the same moment is never overwritten. restock/returned must be positive, damaged negative.",
+        requestBody: jsonBody(stockAdjustmentSchema),
+        responses: { ...ok("Recorded", ref("StockMovement"), { status: 201 }), ...errors(400, 401, 403, 404, 409) }
+      }
+    },
     "/admin/reviews/{id}": {
       parameters: [pathId("id", "Review id")],
       delete: { tags: ["Admin"], summary: "Remove any review", ...LOGGED_IN, responses: { ...message("Deleted"), ...errors(401, 403, 404) } }
@@ -338,7 +381,12 @@ export const openApiDocument = {
 
     // ----- Cart -----
     "/cart": {
-      get: { tags: ["Cart"], summary: "My cart with totals", ...LOGGED_IN, responses: { ...ok("Cart", ref("Cart")), ...errors(401) } },
+      get: {
+        tags: ["Cart"], summary: "My cart with totals", ...LOGGED_IN,
+        description: "Add `?coupon=CODE` to see what a coupon would save (`coupon`, `discount`, `total`). Nothing is reserved: the coupon is checked again at checkout. A coupon that can't be used gives 404 (no such coupon) or 409 with the reason.",
+        parameters: queryParams(cartQuerySchema),
+        responses: { ...ok("Cart", ref("Cart")), ...errors(400, 401, 404, 409) }
+      },
       delete: { tags: ["Cart"], summary: "Empty my cart", ...LOGGED_IN, responses: { ...ok("Empty cart", ref("Cart")), ...errors(401) } }
     },
     "/cart/items": {
@@ -358,6 +406,20 @@ export const openApiDocument = {
         responses: { ...ok("Updated cart", ref("Cart")), ...errors(400, 401, 404, 409) }
       },
       delete: { tags: ["Cart"], summary: "Remove a product", ...LOGGED_IN, responses: { ...ok("Updated cart", ref("Cart")), ...errors(401, 404) } }
+    },
+
+    // ----- Wishlist -----
+    "/wishlist": {
+      get: { tags: ["Cart"], summary: "My wishlist (newest first)", ...LOGGED_IN, responses: { ...ok("Wishlist", { type: "array", items: ref("WishlistItem") }), ...errors(401) } }
+    },
+    "/wishlist/{productId}": {
+      parameters: [pathId("productId", "Product id")],
+      put: {
+        tags: ["Cart"], summary: "Save a product to my wishlist", ...LOGGED_IN,
+        description: "Saving a product that's already saved changes nothing (safe to repeat). At most 200 products.",
+        responses: { ...ok("Wishlist", { type: "array", items: ref("WishlistItem") }), ...errors(400, 401, 404, 409) }
+      },
+      delete: { tags: ["Cart"], summary: "Remove a product from my wishlist", ...LOGGED_IN, responses: { ...ok("Wishlist", { type: "array", items: ref("WishlistItem") }), ...errors(400, 401, 404) } }
     },
 
     // ----- Addresses -----
@@ -385,7 +447,7 @@ export const openApiDocument = {
       post: {
         tags: ["Orders"], summary: "Checkout: turn my cart into an order", ...LOGGED_IN,
         parameters: [IDEMPOTENCY_KEY],
-        description: "Leave out `addressId` to ship to your default address. Stock is reserved now; the order starts as `pending` and must be paid by `expiresAt` (3 days by default; set ORDER_PAYMENT_TIMEOUT_MINUTES to change it), or it's cancelled automatically and the stock released.",
+        description: "Leave out `addressId` to ship to your default address. Send `couponCode` for a discount (404/409 if it can't be used). Stock is reserved now; the order starts as `pending` and must be paid by `expiresAt` (3 days by default; set ORDER_PAYMENT_TIMEOUT_MINUTES to change it), or it's cancelled automatically and the stock released.",
         requestBody: { ...jsonBody(checkoutSchema), required: false },
         responses: { ...ok("Order placed", ref("Order"), { status: 201 }), ...errors(400, 401, 404, 409, 422) }
       },
@@ -524,6 +586,53 @@ export const openApiDocument = {
         type: "object",
         properties: { user: ref("User"), token: { type: "string", description: "Send as `Authorization: Bearer <token>`" } }
       },
+      WishlistItem: {
+        type: "object",
+        properties: {
+          productId: UUID, slug: { type: "string" }, name: { type: "string" },
+          price: { type: "integer", description: "Today's lowest price" }, inStock: { type: "boolean" },
+          thumbnailUrl: { type: ["string", "null"] },
+          rating: { type: "object", properties: { average: { type: "number" }, count: { type: "integer" } } },
+          addedAt: { type: "string", format: "date-time" }
+        }
+      },
+      StockMovement: {
+        type: "object",
+        properties: {
+          id: UUID,
+          productId: { type: ["string", "null"], format: "uuid" },
+          variantId: { type: ["string", "null"], format: "uuid" },
+          productName: { type: ["string", "null"], description: "null if the product was deleted since" },
+          optionsLabel: { type: ["string", "null"] }, sku: { type: ["string", "null"] },
+          change: { type: "integer", example: -2 },
+          stockAfter: { type: "integer", description: "The variant's stock right after this movement" },
+          reason: { type: "string", enum: ["initial", "restock", "damaged", "returned", "correction", "order_placed", "order_cancelled", "manual"] },
+          note: { type: ["string", "null"] },
+          order: { type: ["object", "null"], properties: { id: UUID, orderNumber: { type: "string" } } },
+          by: { type: ["object", "null"], properties: { id: UUID, name: { type: "string" } } },
+          createdAt: { type: "string", format: "date-time" }
+        }
+      },
+      Coupon: {
+        type: "object",
+        properties: {
+          id: UUID,
+          code: { type: "string", example: "WELCOME10" },
+          description: { type: "string" },
+          discountType: { type: "string", enum: ["percent", "fixed"] },
+          discountValue: { type: "integer" },
+          minOrderAmount: { type: "integer" },
+          maxDiscount: { type: ["integer", "null"] },
+          startsAt: { type: ["string", "null"], format: "date-time" },
+          expiresAt: { type: ["string", "null"], format: "date-time" },
+          usageLimit: { type: ["integer", "null"] },
+          perUserLimit: { type: ["integer", "null"] },
+          timesUsed: { type: "integer", description: "Orders using it now (a cancelled order gives its use back)" },
+          isActive: { type: "boolean" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" }
+        }
+      },
       Variant: {
         type: "object",
         properties: {
@@ -587,7 +696,13 @@ export const openApiDocument = {
             }
           },
           totalQuantity: { type: "integer" },
-          subtotal: { type: "integer" }
+          subtotal: { type: "integer" },
+          coupon: {
+            type: ["object", "null"], description: "Only with ?coupon=CODE",
+            properties: { code: { type: "string" }, description: { type: "string" }, discount: { type: "integer" } }
+          },
+          discount: { type: "integer" },
+          total: { type: "integer", description: "subtotal - discount" }
         }
       },
       Address: {
@@ -613,7 +728,10 @@ export const openApiDocument = {
           id: UUID,
           orderNumber: { type: "string", example: "ORD-7K3M9Q", description: "Short, random, easy to read out (no 0/O, 1/I/L, U)" },
           status: { type: "string", enum: ORDER_STATUSES },
-          totalAmount: { type: "integer", description: "Whole rupees" },
+          subtotalAmount: { type: "integer", description: "The items, in whole rupees" },
+          discountAmount: { type: "integer", description: "Taken off by the coupon (0 without one)" },
+          couponCode: { type: ["string", "null"], example: "WELCOME10" },
+          totalAmount: { type: "integer", description: "What is paid: subtotalAmount - discountAmount" },
           createdAt: { type: "string", format: "date-time" },
           expiresAt: {
             type: ["string", "null"], format: "date-time",

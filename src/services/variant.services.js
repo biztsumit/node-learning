@@ -4,6 +4,7 @@ import pool from "../config/db.js";
 import { withTransaction } from "../db/transaction.js";
 import { AppError } from "../utils/app-error.js";
 import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
+import { setStockContext } from "../db/stock-context.js";
 
 // {"size": "M", "colour": "Blue"} → "Size: M, Colour: Blue"   ({} → "")
 export const optionsLabel = (options = {}) =>
@@ -63,9 +64,11 @@ const handleDbError = (err) => {
   throw err;
 };
 
-export const createVariant = (productId, { options, sku, price, stock }) =>
+// adminId: who did it, for the stock ledger
+export const createVariant = (productId, { options, sku, price, stock }, adminId) =>
   withTransaction(async (client) => {
     await lockProduct(client, productId);
+    await setStockContext(client, { reason: "initial", userId: adminId });
     checkOptionNames(await listVariants(productId, client), options);
 
     const { rows } = await client
@@ -80,9 +83,11 @@ export const createVariant = (productId, { options, sku, price, stock }) =>
   });
 
 // Partial update: send only what changes
-export const updateVariant = (productId, variantId, fields) =>
+// Setting stock here is a "correction" in the ledger (for deliveries, use a stock movement)
+export const updateVariant = (productId, variantId, fields, adminId) =>
   withTransaction(async (client) => {
     await lockProduct(client, productId);
+    await setStockContext(client, { reason: "correction", userId: adminId });
     const variants = await listVariants(productId, client);
     const current = variants.find((v) => v.id === variantId);
     if (!current) {

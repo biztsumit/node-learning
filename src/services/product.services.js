@@ -8,6 +8,7 @@ import { productImagePublicId, thumbnailUrl } from "./cloudinary.client.js";
 import { enqueue } from "../jobs/queue.js";
 import { AppError } from "../utils/app-error.js";
 import { listVariants } from "./variant.services.js";
+import { setStockContext } from "../db/stock-context.js";
 
 // LEFT JOIN keeps products that have no category (their category columns come back as NULL)
 const SELECT_PRODUCTS = `
@@ -200,10 +201,12 @@ const insertWithFreeSlug = async (client, { name, description, price, stock, ima
 
 // Creates the product AND its default variant (no options) in one transaction, so there's
 // never a product without anything to buy. Add more variants with POST /products/:id/variants.
-export const createProduct = async ({ name, description, price, stock, imageUrl, categoryId }) => {
+// adminId: who did it, for the stock ledger
+export const createProduct = async ({ name, description, price, stock, imageUrl, categoryId }, adminId) => {
 
   const productId = await withTransaction(async (client) => {
     const id = await insertWithFreeSlug(client, { name, description, price, stock, imageUrl, categoryId });
+    await setStockContext(client, { reason: "initial", userId: adminId });
     await client.query(
       "INSERT INTO product_variants (product_id, price, stock) VALUES ($1, $2, $3)",
       [id, price, stock]
@@ -247,7 +250,7 @@ const updateAndGetPreviousImage = (id, change) =>
 
 // The slug is NOT changed on update, so links to the product keep working after a rename.
 // price/stock (optional) belong to the variant: allowed only for a product with ONE variant.
-export const updateProductById = async (id, { name, description, price, stock, imageUrl, categoryId }) => {
+export const updateProductById = async (id, { name, description, price, stock, imageUrl, categoryId }, adminId) => {
   const result = await updateAndGetPreviousImage(id, async (client) => {
     await client.query(
       "UPDATE products SET name = $1, description = $2, image_url = $3, category_id = $4 WHERE id = $5",
@@ -262,6 +265,8 @@ export const updateProductById = async (id, { name, description, price, stock, i
       if (variants.length !== 1) {
         throw new AppError(409, `This product has ${variants.length} variants: change price and stock on each variant instead`);
       }
+      // Setting a new total is a "correction" in the ledger (for deliveries, use a stock movement)
+      await setStockContext(client, { reason: "correction", userId: adminId });
       await client.query(
         "UPDATE product_variants SET price = COALESCE($1, price), stock = COALESCE($2, stock) WHERE id = $3",
         [price ?? null, stock ?? null, variants[0].id]

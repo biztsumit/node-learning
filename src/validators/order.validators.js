@@ -2,6 +2,7 @@ import { z } from "zod";
 import { idSchema, paginationFields } from "./common.validators.js";
 import { ORDER_STATUSES } from "../utils/order-status.js";
 import { ORDER_NUMBER_PATTERN } from "../utils/order-number.js";
+import { couponCodeSchema } from "./coupon.validators.js";
 
 // "ORD-7K3M9Q". Also accepts what people actually type: "ord-7k3m9q", " 7K3M9Q "
 const orderNumberSchema = z
@@ -22,7 +23,8 @@ const statusSchema = z.enum(ORDER_STATUSES, {
 
 // POST /orders — leave addressId out to use your default address
 export const checkoutSchema = z.object({
-  addressId: idSchema("addressId").optional()
+  addressId: idSchema("addressId").optional(),
+  couponCode: couponCodeSchema.optional()
 });
 
 // GET /orders?status=pending&page=1

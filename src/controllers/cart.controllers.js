@@ -1,4 +1,5 @@
 import * as cartService from "../services/cart.services.js";
+import { previewCoupon } from "../services/coupon.services.js";
 import { optionsLabel } from "../services/variant.services.js";
 import { MAX_QUANTITY_PER_ITEM } from "../validators/cart.validators.js";
 import { AppError } from "../utils/app-error.js";
@@ -23,18 +24,24 @@ const checkAvailable = (variant, wantedQuantity) => {
   }
 };
 
-const sendCart = async (res, userId) => {
+// couponCode (optional): also show what that coupon would save. Nothing is reserved:
+// the coupon is checked again, for real, at checkout.
+const sendCart = async (res, userId, couponCode) => {
   const cart = await cartService.getCart(userId);
+  const coupon = couponCode && cart.items.length > 0
+    ? await previewCoupon(userId, couponCode, cart.subtotal)
+    : null;
+  const discount = coupon?.discount ?? 0;
 
   res.json({
     success: true,
-    data: cart
+    data: { ...cart, coupon, discount, total: cart.subtotal - discount }
   });
 };
 
-// GET /cart
+// GET /cart?coupon=WELCOME10
 export const getCart = async (req, res) => {
-  await sendCart(res, req.user.id);
+  await sendCart(res, req.user.id, req.query.coupon);
 };
 
 // POST /cart/items  { productId, variantId?, quantity }

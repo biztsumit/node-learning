@@ -10,6 +10,8 @@ import { enqueue } from "../jobs/queue.js";
 import { getAddress } from "./address.services.js";
 import { processRefund, requestRefund } from "./refund.services.js";
 import { optionsLabel } from "./variant.services.js";
+import { releaseCoupon, recordRedemption, reserveCoupon } from "./coupon.services.js";
+import { setStockContext } from "../db/stock-context.js";
 
 // ---------- Reading orders ----------
 
@@ -19,6 +21,10 @@ const toOrder = (order, items, { includeCustomer }) => ({
   // What customers see and quote ("ORD-7K3M9Q"); the id is for the API
   orderNumber: order.order_number,
   status: order.status,
+  // subtotal (the items) - discount (the coupon) = total (what is paid)
+  subtotalAmount: order.subtotal_amount,
+  discountAmount: order.discount_amount,
+  couponCode: order.coupon_code,
   totalAmount: order.total_amount,
   createdAt: order.created_at,
   updatedAt: order.updated_at,
@@ -62,7 +68,8 @@ export const getOrderById = async (orderId, { userId } = {}) => {
   }
 
   const { rows: orders } = await pool.query(
-    `SELECT o.id, o.order_number, o.status, o.total_amount, o.created_at, o.updated_at, o.shipping_address, o.cancel_reason,
+    `SELECT o.id, o.order_number, o.status, o.subtotal_amount, o.discount_amount, o.coupon_code, o.total_amount,
+            o.created_at, o.updated_at, o.shipping_address, o.cancel_reason,
             (SELECT json_build_object('status', r.status, 'amount', r.amount, 'requested_at', r.created_at)
              FROM refunds r JOIN payments p ON p.id = r.payment_id
              WHERE p.order_id = o.id
@@ -167,15 +174,15 @@ export const listOrders = async ({ userId, status, orderNumber, page, limit }, {
 // A failed statement normally ruins the whole transaction ("current transaction is aborted").
 // A SAVEPOINT is a bookmark inside it: ROLLBACK TO SAVEPOINT undoes just the failed insert,
 // and the rest of the checkout (locked cart, checked stock) carries on.
-const insertOrderWithNumber = async (client, [userId, totalAmount, shippingAddress]) => {
+const insertOrderWithNumber = async (client, { userId, subtotal, discount, couponCode, shippingAddress }) => {
   for (let attempt = 1; ; attempt++) {
     await client.query("SAVEPOINT order_number");
     try {
       const { rows: [order] } = await client.query(
-        `INSERT INTO orders (user_id, total_amount, shipping_address, order_number)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO orders (user_id, subtotal_amount, discount_amount, total_amount, coupon_code, shipping_address, order_number)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id, order_number`,
-        [userId, totalAmount, shippingAddress, orderNumbers.next()]
+        [userId, subtotal, discount, subtotal - discount, couponCode, shippingAddress, orderNumbers.next()]
       );
       await client.query("RELEASE SAVEPOINT order_number");
       return order;
@@ -218,7 +225,7 @@ const getDefaultAddress = async (client, userId) => {
 
 // Turns the user's cart into an order. All steps run in ONE transaction:
 // if anything fails (e.g. not enough stock), nothing is saved and the cart stays as it was.
-export const checkout = async (userId, { addressId } = {}) => {
+export const checkout = async (userId, { addressId, couponCode } = {}) => {
 
   const orderId = await withTransaction(async (client) => {
 
@@ -274,16 +281,33 @@ export const checkout = async (userId, { addressId } = {}) => {
       throw new AppError(409, "Some items in your cart are no longer available", problems);
     }
 
-    // 3. Create the order. The total is calculated here, from database prices.
-    const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    // 3. The money, calculated here from database prices (never from what the browser says)
+    const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-    const order = await insertOrderWithNumber(client, [userId, totalAmount, shippingAddress]);
+    // 4. A coupon? Lock it and check its rules now, inside this transaction.
+    //    Locked after the products, like everywhere else, so locks are always taken in one order.
+    const coupon = couponCode ? await reserveCoupon(client, userId, couponCode, subtotal) : null;
+
+    const order = await insertOrderWithNumber(client, {
+      userId,
+      subtotal,
+      discount: coupon?.discount ?? 0,
+      couponCode: coupon?.code ?? null,
+      shippingAddress
+    });
+
+    if (coupon) {
+      await recordRedemption(client, coupon, { orderId: order.id, userId });
+    }
+
+    // The stock taken below is logged in the ledger as "order_placed" for this order
+    await setStockContext(client, { reason: "order_placed", orderId: order.id, userId });
 
     // Queued inside the transaction: if anything below fails, there's no "order placed" email
     await enqueue("order-email", { orderId: order.id, type: "placed" }, { client });
 
     for (const item of cart) {
-      // 4. Copy the product's name, the chosen options, SKU and price into the order (the snapshot)
+      // 5. Copy the product's name, the chosen options, SKU and price into the order (the snapshot)
       await client.query(
         `INSERT INTO order_items
            (order_id, product_id, variant_id, product_name, variant_options, sku, unit_price, quantity, line_total)
@@ -292,14 +316,14 @@ export const checkout = async (userId, { addressId } = {}) => {
           item.price, item.quantity, item.price * item.quantity]
       );
 
-      // 5. Take the items out of stock (the trigger updates the product's total)
+      // 6. Take the items out of stock (the trigger updates the product's total)
       await client.query(
         "UPDATE product_variants SET stock = stock - $1 WHERE id = $2",
         [item.quantity, item.variant_id]
       );
     }
 
-    // 6. Empty the cart
+    // 7. Empty the cart
     await client.query("DELETE FROM cart_items WHERE user_id = $1", [userId]);
 
     return order.id;
@@ -344,6 +368,7 @@ const restoreStock = async (client, orderId) => {
 
   // One variant at a time, in that order. Lines whose variant was deleted (variant_id NULL)
   // aren't in the list: there's nothing to put the stock back into.
+  await setStockContext(client, { reason: "order_cancelled", orderId });
   for (const line of lines) {
     await client.query(
       "UPDATE product_variants SET stock = stock + $1 WHERE id = $2",
@@ -356,6 +381,8 @@ const restoreStock = async (client, orderId) => {
 const applyStatus = async (client, orderId, newStatus, { cancelReason = null } = {}) => {
   if (newStatus === "cancelled") {
     await restoreStock(client, orderId);
+    // Give the coupon use back (after the stock: products first, then coupons, as at checkout)
+    await releaseCoupon(client, orderId);
   }
 
   await client.query(

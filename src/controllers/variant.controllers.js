@@ -19,7 +19,7 @@ export const getVariants = async (req, res) => {
 // POST /products/:id/variants (admin)
 export const addVariant = async (req, res) => {
 
-  const variant = await variantService.createVariant(req.params.id, req.body);
+  const variant = await variantService.createVariant(req.params.id, req.body, req.user.id);
 
   res.status(201).json({
     success: true,
@@ -30,7 +30,7 @@ export const addVariant = async (req, res) => {
 // PATCH /products/:id/variants/:variantId (admin)
 export const editVariant = async (req, res) => {
 
-  const variant = await variantService.updateVariant(req.params.id, req.params.variantId, req.body);
+  const variant = await variantService.updateVariant(req.params.id, req.params.variantId, req.body, req.user.id);
 
   res.json({
     success: true,

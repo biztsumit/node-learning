@@ -10,6 +10,7 @@ import { requireAuth } from "../middlewares/auth.middleware.js";
 import { idempotency } from "../middlewares/idempotency.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import { idParamSchema } from "../validators/common.validators.js";
+import { cartQuerySchema } from "../validators/coupon.validators.js";
 import {
   addCartItemSchema,
   updateCartItemSchema
@@ -20,7 +21,8 @@ const router = Router();
 // Every cart route needs a logged-in user, so add the guard once for the whole router
 router.use(requireAuth);
 
-router.get("/", getCart);
+// ?coupon=CODE previews a discount
+router.get("/", validate({ query: cartQuerySchema }), getCart);
 router.delete("/", clearCart);
 // Idempotency-Key: a retried "add to cart" doesn't add the quantity twice
 router.post("/items", idempotency, validate({ body: addCartItemSchema }), addItem);
