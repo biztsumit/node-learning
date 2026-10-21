@@ -20,7 +20,11 @@ const connection = env.DATABASE_URL
 export const connectionConfig = {
   ...connection,
   // true = encrypted connection AND check the server's certificate
-  ...(env.DB_SSL && { ssl: true })
+  ...(env.DB_SSL && { ssl: true }),
+  // Product search treats a name as a typo-match when it scores at least this (0 to 1).
+  // The default 0.6 misses "ceramc mug"; much lower and "lamp" starts finding "laptop".
+  // Set per connection because the <% operator (which can use the index) reads it from here.
+  options: "-c pg_trgm.word_similarity_threshold=0.45"
 };
 
 const pool = new Pool(connectionConfig);

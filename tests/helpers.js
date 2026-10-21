@@ -52,16 +52,28 @@ export const createUser = async ({ role = "user", name = "Test User", password =
   return { id, email, password, token, auth: { Authorization: `Bearer ${token}` } };
 };
 
-// Inserts a product directly (faster than going through the admin API)
+// Inserts a product directly (faster than going through the admin API), with its one
+// default variant. Returns the product plus variantId.
 export const createProduct = async ({ name = "Test Product", price = 100, stock = 10, categoryId = null } = {}) => {
-  const { rows } = await pool.query(
+  const { rows: [product] } = await pool.query(
     `INSERT INTO products (slug, name, price, stock, category_id)
      VALUES ($1, $2, $3, $4, $5)
      RETURNING id, slug, name, price, stock`,
     [`${slugify(name)}-${unique()}`, name, price, stock, categoryId]
   );
-  return rows[0];
+  const { rows: [variant] } = await pool.query(
+    "INSERT INTO product_variants (product_id, price, stock) VALUES ($1, $2, $3) RETURNING id",
+    [product.id, price, stock]
+  );
+  return { ...product, variantId: variant.id };
 };
+
+// Changes stock or price the way it really lives now: on the product's variant(s)
+export const setVariantFields = (productId, { stock, price }) =>
+  pool.query(
+    "UPDATE product_variants SET stock = COALESCE($2, stock), price = COALESCE($3, price) WHERE product_id = $1",
+    [productId, stock ?? null, price ?? null]
+  );
 
 export const createAddress = async (user, fields = {}) => {
   const res = await api()

@@ -7,7 +7,7 @@ import { sentEmails } from "../src/emails/transport.js";
 import { withTransaction } from "../src/db/transaction.js";
 import {
   api, pool, resetDatabase, closeDatabase,
-  createUser, createProduct, createAddress, placeOrder
+  createUser, createProduct, createAddress, placeOrder, setVariantFields
 } from "./helpers.js";
 
 // Fake Cloudinary delete API that can fail on demand
@@ -132,7 +132,7 @@ describe("job queue (pg-boss)", () => {
 
     // A checkout that fails (out of stock) and rolls back
     await api().post("/cart/items").set(user.auth).send({ productId: lamp.id, quantity: 3 }).expect(200);
-    await pool.query("UPDATE products SET stock = 1 WHERE id = $1", [lamp.id]);
+    await setVariantFields(lamp.id, { stock: 1 });
     const before = await orderEmailJobs();
     await api().post("/orders").set(user.auth).send({}).expect(409);
     assert.equal(await orderEmailJobs(), before, "no email job may survive a rollback");

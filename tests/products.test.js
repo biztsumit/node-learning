@@ -67,6 +67,60 @@ describe("browsing products (public)", () => {
   });
 });
 
+describe("searching products", () => {
+
+  const names = async (query) =>
+    (await api().get(`/products?search=${encodeURIComponent(query)}`).expect(200)).body.data.map((p) => p.name);
+
+  beforeEach(async () => {
+    await createProduct({ name: "Wireless Headphones" });
+    await createProduct({ name: "Running Shoes" });
+    await createProduct({ name: "Classic Cotton Shirt" });
+    await createProduct({ name: "Linen Shirt" });
+    await createProduct({ name: "Laptop Stand" });
+    const lamp = await createProduct({ name: "Desk Lamp" });
+    await pool.query("UPDATE products SET description = 'Warm light, with a cotton shade' WHERE id = $1", [lamp.id]);
+  });
+
+  it("finds other forms of a word, in the name or the description", async () => {
+    assert.deepEqual(await names("running shoe"), ["Running Shoes"]);
+    assert.deepEqual(await names("lamps"), ["Desk Lamp"]);
+    assert.deepEqual(await names("shade"), ["Desk Lamp"]);
+  });
+
+  it("tolerates typos, without matching everything that's a bit similar", async () => {
+    assert.deepEqual(await names("hedphones"), ["Wireless Headphones"]);
+    assert.deepEqual(await names("runing shoes"), ["Running Shoes"]);
+    assert.deepEqual(await names("lamp"), ["Desk Lamp"]);          // not "Laptop Stand"
+  });
+
+  it("matches numbers exactly", async () => {
+    await createProduct({ name: "Phone 15" });
+    await createProduct({ name: "Phone 16" });
+    assert.deepEqual(await names("phone 15"), ["Phone 15"]);
+  });
+
+  it("puts the best match first: the name counts more than the description", async () => {
+    assert.deepEqual(await names("cotton"), ["Classic Cotton Shirt", "Desk Lamp"]);
+    // Choosing another sort still works while searching
+    const byName = await api().get("/products?search=cotton&sort=name_asc").expect(200);
+    assert.deepEqual(byName.body.data.map((p) => p.name), ["Classic Cotton Shirt", "Desk Lamp"].sort());
+  });
+
+  it("understands search-box syntax", async () => {
+    assert.deepEqual((await names("shirt -classic")), ["Linen Shirt"]);
+    assert.deepEqual((await names("lamp or headphones")).sort(), ["Desk Lamp", "Wireless Headphones"]);
+    assert.deepEqual(await names('"cotton shirt"'), ["Classic Cotton Shirt"]);
+  });
+
+  it("copes with input that isn't words at all", async () => {
+    for (const odd of ["!!!", "'", "&|:*", "-", '"']) {
+      await api().get(`/products?search=${encodeURIComponent(odd)}`).expect(200);
+    }
+  });
+});
+
+
 describe("managing products (admin only)", () => {
 
   it("lets only admins create products, and generates unique slugs", async () => {

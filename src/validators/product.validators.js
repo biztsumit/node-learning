@@ -33,6 +33,13 @@ export const productSchema = z.object({
   categoryId: idSchema("categoryId").nullable().default(null)
 });
 
+// PUT /products/:id — like creating, but price and stock are optional: they belong to the
+// product's variant, so they're only accepted for a product with exactly one variant
+export const productUpdateSchema = productSchema.extend({
+  price: productSchema.shape.price.optional(),
+  stock: productSchema.shape.stock.unwrap().optional()
+});
+
 // Query string of GET /products, e.g. ?search=shirt&category=<uuid>&sort=price_asc&page=2
 // Everything in a query string is text, so numbers use z.coerce.
 const optionalPrice = (label) => z.coerce
@@ -54,10 +61,11 @@ export const productListQuerySchema = z
       .transform((value) => value === "true")
       .optional(),
     sort: z
-      .enum(["newest", "price_asc", "price_desc", "name_asc", "rating_desc"], {
-        error: "sort must be one of: newest, price_asc, price_desc, name_asc, rating_desc"
+      .enum(["relevance", "newest", "price_asc", "price_desc", "name_asc", "rating_desc"], {
+        error: "sort must be one of: relevance, newest, price_asc, price_desc, name_asc, rating_desc"
       })
-      .default("newest"),
+      // Left out: "relevance" when searching, "newest" otherwise
+      .optional(),
     ...paginationFields
   })
   .refine(

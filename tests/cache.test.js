@@ -3,7 +3,7 @@ import { describe, it, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { catalogCache } from "../src/cache/catalog-cache.js";
 import { startCacheInvalidation, stopCacheInvalidation } from "../src/cache/invalidation.js";
-import { api, pool, resetDatabase, closeDatabase, createUser, createProduct } from "./helpers.js";
+import { api, pool, resetDatabase, closeDatabase, createUser, createProduct, setVariantFields } from "./helpers.js";
 
 before(async () => {
   catalogCache.configure({ ttlSeconds: 60 });
@@ -87,7 +87,7 @@ describe("catalog cache", () => {
     await waitFor(async () => (await api().get(`/products/${product.id}`)).headers["x-cache"] === "HIT");
 
     // Change it behind the API's back, the way checkout, reviews or a manual SQL fix would
-    await pool.query("UPDATE products SET stock = 3 WHERE id = $1", [product.id]);
+    await setVariantFields(product.id, { stock: 3 });
 
     await waitFor(async () => (await api().get(`/products/${product.id}`)).body.data.stock === 3);
   });

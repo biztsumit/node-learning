@@ -43,9 +43,10 @@ const seed = async () => {
   }
 
   for (const product of products) {
-    await pool.query(
+    const { rows: [created] } = await pool.query(
       `INSERT INTO products (slug, name, description, price, stock, category_id)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id`,
       [
         slugify(product.name),
         product.name,
@@ -54,6 +55,11 @@ const seed = async () => {
         product.stock,
         categoryIds[product.category]
       ]
+    );
+    // Every product needs at least one variant: price and stock really live there
+    await pool.query(
+      "INSERT INTO product_variants (product_id, price, stock) VALUES ($1, $2, $3)",
+      [created.id, product.price, product.stock]
     );
   }
 

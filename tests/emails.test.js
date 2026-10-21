@@ -5,7 +5,7 @@ import { buildOrderEmail, escapeHtml, ORDER_EMAIL_TYPES } from "../src/emails/or
 import { expireUnpaidOrders, getOrderById } from "../src/services/order.services.js";
 import {
   api, pool, resetDatabase, closeDatabase,
-  createUser, createProduct, createAddress, placeOrder
+  createUser, createProduct, createAddress, placeOrder, setVariantFields
 } from "./helpers.js";
 
 beforeEach(async () => {
@@ -47,7 +47,7 @@ describe("order emails", () => {
     await createAddress(user);
     const lamp = await createProduct({ stock: 3 });
     await api().post("/cart/items").set(user.auth).send({ productId: lamp.id, quantity: 3 }).expect(200);
-    await pool.query("UPDATE products SET stock = 1 WHERE id = $1", [lamp.id]);
+    await setVariantFields(lamp.id, { stock: 1 });
 
     await api().post("/orders").set(user.auth).send({}).expect(409);
     assert.deepEqual(orderEmails(), []);

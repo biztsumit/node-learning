@@ -6,7 +6,8 @@ import { z } from "zod";
 import { MAX_QUANTITY_PER_ITEM, addCartItemSchema, updateCartItemSchema } from "../validators/cart.validators.js";
 import { registerSchema, loginSchema, updateProfileSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, verifyEmailSchema } from "../validators/auth.validators.js";
 import { categorySchema } from "../validators/category.validators.js";
-import { productSchema, productListQuerySchema } from "../validators/product.validators.js";
+import { productSchema, productUpdateSchema, productListQuerySchema } from "../validators/product.validators.js";
+import { createVariantSchema, updateVariantSchema } from "../validators/variant.validators.js";
 import { createAddressSchema, updateAddressSchema } from "../validators/address.validators.js";
 import { checkoutSchema, orderListQuerySchema, adminOrderListQuerySchema, updateOrderStatusSchema, orderNumberParamSchema } from "../validators/order.validators.js";
 import { verifyPaymentSchema } from "../validators/payment.validators.js";
@@ -229,6 +230,7 @@ export const openApiDocument = {
     "/products": {
       get: {
         tags: ["Catalog"], summary: "Search and list products", ...PUBLIC,
+        description: "`search` matches words in the name and description in any form (\"lamps\" finds \"lamp\"), tolerates typos in the name (\"hedphones\"), and supports search-box syntax: `red mug`, `mug or cup`, `-plastic`, `\"exact phrase\"`. While searching, results come best match first unless another `sort` is chosen.",
         parameters: queryParams(productListQuerySchema),
         responses: { ...ok("A page of products", { type: "array", items: ref("Product") }, { pagination: true }), ...errors(400) }
       },
@@ -251,8 +253,9 @@ export const openApiDocument = {
       get: { tags: ["Catalog"], summary: "Get a product", ...PUBLIC, responses: { ...ok("Product", ref("Product")), ...errors(400, 404) } },
       put: {
         tags: ["Admin"], summary: "Replace a product's details", ...LOGGED_IN,
-        requestBody: jsonBody(productSchema),
-        responses: { ...ok("Updated", ref("Product")), ...errors(400, 401, 403, 404) }
+        description: "price and stock are optional here, and only accepted for a product with ONE variant (they belong to the variant). For a product with several, change each variant instead.",
+        requestBody: jsonBody(productUpdateSchema),
+        responses: { ...ok("Updated", ref("Product")), ...errors(400, 401, 403, 404, 409) }
       },
       delete: { tags: ["Admin"], summary: "Delete a product", ...LOGGED_IN, responses: { ...message("Deleted"), ...errors(401, 403, 404) } }
     },
@@ -280,6 +283,29 @@ export const openApiDocument = {
         responses: { ...ok("Updated", ref("Review")), ...errors(400, 401, 404) }
       },
       delete: { tags: ["Reviews"], summary: "Delete my review", ...LOGGED_IN, responses: { ...message("Deleted"), ...errors(401, 404) } }
+    },
+    "/products/{id}/variants": {
+      parameters: [pathId("id", "Product id")],
+      get: { tags: ["Catalog"], summary: "A product's variants (sizes, colours...)", ...PUBLIC, responses: { ...ok("Variants", { type: "array", items: ref("Variant") }), ...errors(404) } },
+      post: {
+        tags: ["Admin"], summary: "Add a variant", ...LOGGED_IN,
+        description: "Every variant of a product must use the same option names (e.g. all `size` + `colour`). A product created with POST /products starts with one variant without options: PATCH it to give it options first.",
+        requestBody: jsonBody(createVariantSchema),
+        responses: { ...ok("Created", ref("Variant"), { status: 201 }), ...errors(400, 401, 403, 404, 409) }
+      }
+    },
+    "/products/{id}/variants/{variantId}": {
+      parameters: [pathId("id", "Product id"), pathId("variantId", "Variant id")],
+      patch: {
+        tags: ["Admin"], summary: "Change a variant (options, SKU, price, stock)", ...LOGGED_IN,
+        requestBody: jsonBody(updateVariantSchema),
+        responses: { ...ok("Updated", ref("Variant")), ...errors(400, 401, 403, 404, 409) }
+      },
+      delete: {
+        tags: ["Admin"], summary: "Delete a variant", ...LOGGED_IN,
+        description: "A product keeps at least one variant (409 for the last one). Past orders keep their snapshot.",
+        responses: { ...message("Deleted"), ...errors(401, 403, 404, 409) }
+      }
     },
     "/products/{id}/image": {
       parameters: [pathId("id", "Product id")],
@@ -319,13 +345,13 @@ export const openApiDocument = {
       post: {
         tags: ["Cart"], summary: "Add a product (or more of it)", ...LOGGED_IN,
         parameters: [IDEMPOTENCY_KEY],
-        description: `Adding a product that's already in the cart raises its quantity. At most ${MAX_QUANTITY_PER_ITEM} of one product, and never more than the stock.`,
+        description: `Send variantId to choose an option (size, colour...); it can be left out for a product with only one variant. Adding a variant that's already in the cart raises its quantity. At most ${MAX_QUANTITY_PER_ITEM} of one product, and never more than the stock.`,
         requestBody: jsonBody(addCartItemSchema),
         responses: { ...ok("Updated cart", ref("Cart")), ...errors(400, 401, 404, 409, 422) }
       }
     },
-    "/cart/items/{productId}": {
-      parameters: [pathId("productId", "Product id")],
+    "/cart/items/{id}": {
+      parameters: [pathId("id", "The cart line's variantId (or the productId, if your cart has only one option of that product)")],
       patch: {
         tags: ["Cart"], summary: "Set a product's quantity", ...LOGGED_IN,
         requestBody: jsonBody(updateCartItemSchema),
@@ -498,6 +524,17 @@ export const openApiDocument = {
         type: "object",
         properties: { user: ref("User"), token: { type: "string", description: "Send as `Authorization: Bearer <token>`" } }
       },
+      Variant: {
+        type: "object",
+        properties: {
+          id: UUID,
+          options: { type: "object", additionalProperties: { type: "string" }, example: { size: "M", colour: "Blue" } },
+          label: { type: "string", example: "Size: M, Colour: Blue", description: "Empty for a product without options" },
+          sku: { type: ["string", "null"], example: "TEE-M-BLU" },
+          price: { type: "integer", description: "Whole rupees" },
+          stock: { type: "integer" }
+        }
+      },
       Category: { type: "object", properties: { id: UUID, name: { type: "string" } } },
       Product: {
         type: "object",
@@ -506,8 +543,10 @@ export const openApiDocument = {
           slug: { type: "string", example: "ceramic-coffee-mug" },
           name: { type: "string" },
           description: { type: "string" },
-          price: { type: "integer", description: "Whole rupees", example: 349 },
-          stock: { type: "integer" },
+          price: { type: "integer", description: "The LOWEST variant price, in whole rupees (\"from ₹349\")", example: 349 },
+          stock: { type: "integer", description: "Total stock across all variants" },
+          variantCount: { type: "integer" },
+          variants: { type: "array", items: ref("Variant"), description: "Single product only (GET /products/{id} or /slug/{slug}), not in lists" },
           imageUrl: { type: ["string", "null"], description: "The original image" },
           thumbnailUrl: { type: ["string", "null"], description: "400×400, automatic format and quality (for lists)" },
           rating: { type: "object", properties: { average: { type: "number", example: 4.5 }, count: { type: "integer" } } },
@@ -540,7 +579,8 @@ export const openApiDocument = {
             items: {
               type: "object",
               properties: {
-                productId: UUID, slug: { type: "string" }, name: { type: "string" },
+                productId: UUID, variantId: UUID, slug: { type: "string" }, name: { type: "string" },
+                options: { type: "object", additionalProperties: { type: "string" } }, optionsLabel: { type: "string" },
                 price: { type: "integer" }, imageUrl: { type: ["string", "null"] }, stock: { type: "integer" },
                 quantity: { type: "integer" }, lineTotal: { type: "integer" }
               }
@@ -602,7 +642,11 @@ export const openApiDocument = {
               type: "object",
               properties: {
                 productId: { type: ["string", "null"], format: "uuid", description: "null if the product was deleted later" },
-                productName: { type: "string" }, unitPrice: { type: "integer" }, quantity: { type: "integer" }, lineTotal: { type: "integer" }
+                variantId: { type: ["string", "null"], format: "uuid" },
+                productName: { type: "string" },
+                options: { type: "object", additionalProperties: { type: "string" }, description: "The options chosen, as they were when ordered" },
+                optionsLabel: { type: "string" }, sku: { type: ["string", "null"] },
+                unitPrice: { type: "integer" }, quantity: { type: "integer" }, lineTotal: { type: "integer" }
               }
             }
           }

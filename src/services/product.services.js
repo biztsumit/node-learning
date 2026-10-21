@@ -6,6 +6,8 @@ import { slugify } from "../utils/slugify.js";
 import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
 import { productImagePublicId, thumbnailUrl } from "./cloudinary.client.js";
 import { enqueue } from "../jobs/queue.js";
+import { AppError } from "../utils/app-error.js";
+import { listVariants } from "./variant.services.js";
 
 // LEFT JOIN keeps products that have no category (their category columns come back as NULL)
 const SELECT_PRODUCTS = `
@@ -19,6 +21,7 @@ const SELECT_PRODUCTS = `
     p.image_url,
     p.rating_avg,
     p.rating_count,
+    (SELECT COUNT(*)::int FROM product_variants v WHERE v.product_id = p.id) AS variant_count,
     c.id AS category_id,
     c.name AS category_name
   FROM products p
@@ -31,8 +34,10 @@ const toProduct = (row) => ({
   slug: row.slug,
   name: row.name,
   description: row.description,
+  // A summary of the variants (kept by the database): the lowest price and the total stock
   price: row.price,
   stock: row.stock,
+  variantCount: row.variant_count,
   imageUrl: row.image_url,
   // A small, fast version for product lists (resized by Cloudinary for our own images)
   thumbnailUrl: row.image_url ? thumbnailUrl(row.image_url) : null,
@@ -51,8 +56,13 @@ const SORT_OPTIONS = {
   price_desc: "p.price DESC, p.id DESC",
   name_asc: "p.name ASC, p.id ASC",
   // Best average first; with equal averages, the one with more reviews wins
-  rating_desc: "p.rating_avg DESC, p.rating_count DESC, p.id DESC"
+  rating_desc: "p.rating_avg DESC, p.rating_count DESC, p.id DESC",
+  // Best match first ({relevance} is filled in by findProducts). Ties: newest first.
+  relevance: "{relevance} DESC, p.created_at DESC, p.id DESC"
 };
+
+// -word, "exact phrase" or "a or b": the person wants precise rules, not "close enough"
+const usesSearchSyntax = (text) => /(^|\s)-\S|"|\sor\s/i.test(text);
 
 // In LIKE patterns, % and _ are wildcards. Escape them so searching "50%" means the text "50%".
 const escapeLike = (text) => text.replace(/[\\%_]/g, (char) => `\\${char}`);
@@ -69,9 +79,32 @@ export const findProducts = async ({ search, category, minPrice, maxPrice, inSto
     return `$${values.length}`;
   };
 
+  // How well each product matches the search, used by sort=relevance
+  let relevance = "0";
+
   if (search) {
-    const pattern = addValue(`%${escapeLike(search)}%`);
-    conditions.push(`(p.name ILIKE ${pattern} OR p.description ILIKE ${pattern})`);
+    const text = addValue(search);
+    // websearch_to_tsquery understands what people type in search boxes:
+    // "red mug" (both words), "mug or cup", -plastic (without), "exact phrase"
+    const words = `websearch_to_tsquery('english', ${text})`;
+
+    // A product matches when any of these is true:
+    //   1. the words (or their forms: "lamps" = "lamp") are in the name or description
+    //   2. the name looks like the search, typos included ("hedphones")
+    //   3. the name contains it as plain text ("T-Sh", "50%")
+    // With search syntax, only 1: otherwise "shirt -classic" would still find "Classic shirt" via 2 and 3.
+    // With numbers, no 2: to trigrams "iphone 15" looks just like "iPhone 16", and "50" like "500".
+    const ways = [`p.search_vector @@ ${words}`];
+    if (!usesSearchSyntax(search)) {
+      if (!/\d/.test(search)) {
+        ways.push(`${text} <% p.name`);
+      }
+      ways.push(`p.name ILIKE ${addValue(`%${escapeLike(search)}%`)}`);
+    }
+    conditions.push(`(${ways.join(" OR ")})`);
+    // Word matches (name counts more than description, via the A/B weights) plus how close
+    // the name is to what was typed (1 = it contains it exactly)
+    relevance = `ts_rank(p.search_vector, ${words}) + word_similarity(${text}, p.name)`;
   }
   if (category !== undefined) {
     conditions.push(`p.category_id = ${addValue(category)}`);
@@ -87,13 +120,15 @@ export const findProducts = async ({ search, category, minPrice, maxPrice, inSto
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  // No sort chosen: best match first when searching, otherwise newest first
+  const order = sort ?? (search ? "relevance" : "newest");
   const offset = (page - 1) * limit;
 
   // Run both queries at the same time: one page of products, and the total count
   const [rowsResult, countResult] = await Promise.all([
     pool.query(
       `${SELECT_PRODUCTS} ${where}
-       ORDER BY ${SORT_OPTIONS[sort]}
+       ORDER BY ${SORT_OPTIONS[order].replace("{relevance}", relevance)}
        LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
       [...values, limit, offset]
     ),
@@ -113,14 +148,18 @@ export const findProducts = async ({ search, category, minPrice, maxPrice, inSto
   };
 };
 
+// A single product also lists its variants (what customers choose between)
+const withVariants = async (row) =>
+  row && { ...toProduct(row), variants: await listVariants(row.id) };
+
 export const getProductById = async (id) => {
   const { rows } = await pool.query(`${SELECT_PRODUCTS} WHERE p.id = $1`, [id]);
-  return rows[0] && toProduct(rows[0]);
+  return withVariants(rows[0]);
 };
 
 export const getProductBySlug = async (slug) => {
   const { rows } = await pool.query(`${SELECT_PRODUCTS} WHERE p.slug = $1`, [slug]);
-  return rows[0] && toProduct(rows[0]);
+  return withVariants(rows[0]);
 };
 
 // "t-shirt", then "t-shirt-2" ... "t-shirt-9", then "t-shirt-a1b2c3"
@@ -133,28 +172,46 @@ const slugCandidates = function* (name) {
   yield `${base}-${randomBytes(3).toString("hex")}`;
 };
 
-export const createProduct = async ({ name, description, price, stock, imageUrl, categoryId }) => {
-
-  // Try slugs until one is free. The UNIQUE rule on slug decides, so two
-  // products created at the same moment can never end up with the same slug.
+// Try slugs until one is free. The UNIQUE rule on slug decides, so two products created
+// at the same moment can never get the same slug. Inside a transaction a failed INSERT
+// would spoil everything, so each try gets a SAVEPOINT to roll back to.
+const insertWithFreeSlug = async (client, { name, description, price, stock, imageUrl, categoryId }) => {
   for (const slug of slugCandidates(name)) {
+    await client.query("SAVEPOINT product_slug");
     try {
-      const { rows } = await pool.query(
+      const { rows } = await client.query(
         `INSERT INTO products (slug, name, description, price, stock, image_url, category_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id`,
         [slug, name, description, price, stock, imageUrl, categoryId]
       );
-      return getProductById(rows[0].id);
+      await client.query("RELEASE SAVEPOINT product_slug");
+      return rows[0].id;
     } catch (err) {
+      await client.query("ROLLBACK TO SAVEPOINT product_slug");
       const slugTaken = err.code === PG_UNIQUE_VIOLATION && err.constraint === "products_slug_key";
       if (!slugTaken) {
         throw err;
       }
     }
   }
-
   throw new Error(`Could not find a free slug for "${name}"`);
+};
+
+// Creates the product AND its default variant (no options) in one transaction, so there's
+// never a product without anything to buy. Add more variants with POST /products/:id/variants.
+export const createProduct = async ({ name, description, price, stock, imageUrl, categoryId }) => {
+
+  const productId = await withTransaction(async (client) => {
+    const id = await insertWithFreeSlug(client, { name, description, price, stock, imageUrl, categoryId });
+    await client.query(
+      "INSERT INTO product_variants (product_id, price, stock) VALUES ($1, $2, $3)",
+      [id, price, stock]
+    );
+    return id;
+  });
+
+  return getProductById(productId);
 };
 
 // When a product's image changes or the product is deleted, remove the old file from
@@ -178,25 +235,39 @@ const removeOldImage = async (previousUrl, currentUrl) => {
 // replaced, or undefined if there's no such product. (Locking matters: if two admins change
 // the same product at once, each must see the image the OTHER one just set, or a file would
 // be left behind in Cloudinary.)
-const updateAndGetPreviousImage = (id, sql, values) =>
+const updateAndGetPreviousImage = (id, change) =>
   withTransaction(async (client) => {
     const { rows } = await client.query("SELECT image_url FROM products WHERE id = $1 FOR UPDATE", [id]);
     if (rows.length === 0) {
       return undefined;
     }
-    await client.query(sql, values);
+    await change(client);
     return { previousImageUrl: rows[0].image_url };
   });
 
-// The slug is NOT changed on update, so links to the product keep working after a rename
+// The slug is NOT changed on update, so links to the product keep working after a rename.
+// price/stock (optional) belong to the variant: allowed only for a product with ONE variant.
 export const updateProductById = async (id, { name, description, price, stock, imageUrl, categoryId }) => {
-  const result = await updateAndGetPreviousImage(
-    id,
-    `UPDATE products
-     SET name = $1, description = $2, price = $3, stock = $4, image_url = $5, category_id = $6
-     WHERE id = $7`,
-    [name, description, price, stock, imageUrl, categoryId, id]
-  );
+  const result = await updateAndGetPreviousImage(id, async (client) => {
+    await client.query(
+      "UPDATE products SET name = $1, description = $2, image_url = $3, category_id = $4 WHERE id = $5",
+      [name, description, imageUrl, categoryId, id]
+    );
+
+    if (price !== undefined || stock !== undefined) {
+      const { rows: variants } = await client.query(
+        "SELECT id FROM product_variants WHERE product_id = $1 FOR UPDATE",
+        [id]
+      );
+      if (variants.length !== 1) {
+        throw new AppError(409, `This product has ${variants.length} variants: change price and stock on each variant instead`);
+      }
+      await client.query(
+        "UPDATE product_variants SET price = COALESCE($1, price), stock = COALESCE($2, stock) WHERE id = $3",
+        [price ?? null, stock ?? null, variants[0].id]
+      );
+    }
+  });
   if (!result) {
     return undefined;
   }
@@ -206,10 +277,8 @@ export const updateProductById = async (id, { name, description, price, stock, i
 
 // Sets (or, with null, removes) just the product's image
 export const setProductImage = async (id, imageUrl) => {
-  const result = await updateAndGetPreviousImage(
-    id,
-    "UPDATE products SET image_url = $1 WHERE id = $2",
-    [imageUrl, id]
+  const result = await updateAndGetPreviousImage(id, (client) =>
+    client.query("UPDATE products SET image_url = $1 WHERE id = $2", [imageUrl, id])
   );
   if (!result) {
     return undefined;

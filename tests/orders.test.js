@@ -2,7 +2,7 @@ import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import {
   api, pool, resetDatabase, closeDatabase, warmUpPool,
-  createUser, createProduct, createAddress, placeOrder, setOrderStatus, stockOf
+  createUser, createProduct, createAddress, placeOrder, setOrderStatus, stockOf, setVariantFields
 } from "./helpers.js";
 
 beforeEach(resetDatabase);
@@ -62,7 +62,7 @@ describe("checkout", () => {
     assert.equal(cart.body.data.items.length, 0);
 
     // A later price change must not change the order
-    await pool.query("UPDATE products SET price = 999 WHERE id = $1", [mug.id]);
+    await setVariantFields(mug.id, { price: 999 });
     const order = await api().get(`/orders/${res.body.data.id}`).set(user.auth).expect(200);
     assert.equal(order.body.data.items[0].unitPrice, 250);
   });
@@ -74,7 +74,7 @@ describe("checkout", () => {
     const pen = await createProduct({ stock: 2 });
     await api().post("/cart/items").set(user.auth).send({ productId: mug.id, quantity: 1 }).expect(200);
     await api().post("/cart/items").set(user.auth).send({ productId: pen.id, quantity: 2 }).expect(200);
-    await pool.query("UPDATE products SET stock = 1 WHERE id = $1", [pen.id]);
+    await setVariantFields(pen.id, { stock: 1 });
 
     await api().post("/orders").set(user.auth).send({}).expect(409);
 

@@ -62,11 +62,14 @@ const CONTENT = {
 
 export const ORDER_EMAIL_TYPES = Object.keys(CONTENT);
 
+// "T-Shirt" or "T-Shirt (Size: M)"
+const itemName = (item) => (item.optionsLabel ? `${item.productName} (${item.optionsLabel})` : item.productName);
+
 const itemsTable = (order) => `
   <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
     ${order.items.map((item) => `
       <tr>
-        <td style="padding:6px 0;border-bottom:1px solid #eee">${escapeHtml(item.productName)} × ${item.quantity}</td>
+        <td style="padding:6px 0;border-bottom:1px solid #eee">${escapeHtml(itemName(item))} × ${item.quantity}</td>
         <td style="padding:6px 0;border-bottom:1px solid #eee;text-align:right">${rupees(item.lineTotal)}</td>
       </tr>`).join("")}
     <tr>
@@ -111,7 +114,7 @@ export const buildOrderEmail = (type, order) => {
     "",
     ...paragraphs.map((p) => p.replace(/<[^>]+>/g, "")),
     "",
-    ...order.items.map((item) => `- ${item.productName} x ${item.quantity}: ${rupees(item.lineTotal)}`),
+    ...order.items.map((item) => `- ${itemName(item)} x ${item.quantity}: ${rupees(item.lineTotal)}`),
     `Total: ${rupees(order.totalAmount)}`,
     "",
     `Order ${order.orderNumber}`

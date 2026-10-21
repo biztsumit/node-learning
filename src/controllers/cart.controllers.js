@@ -1,17 +1,21 @@
 import * as cartService from "../services/cart.services.js";
-import * as productService from "../services/product.services.js";
+import { optionsLabel } from "../services/variant.services.js";
 import { MAX_QUANTITY_PER_ITEM } from "../validators/cart.validators.js";
 import { AppError } from "../utils/app-error.js";
 
+// "T-Shirt" or "T-Shirt (Size: M)"
+const displayName = (variant) =>
+  Object.keys(variant.options).length > 0 ? `${variant.name} (${optionsLabel(variant.options)})` : variant.name;
+
 // Throws if the cart would hold more than the shop has (or more than the per-item limit).
 // This is a friendly early check; the final stock check happens at checkout.
-const checkAvailable = (product, wantedQuantity) => {
-  if (wantedQuantity > product.stock) {
+const checkAvailable = (variant, wantedQuantity) => {
+  if (wantedQuantity > variant.stock) {
     throw new AppError(
       409,
-      product.stock === 0
-        ? `"${product.name}" is out of stock`
-        : `Only ${product.stock} of "${product.name}" in stock`
+      variant.stock === 0
+        ? `"${displayName(variant)}" is out of stock`
+        : `Only ${variant.stock} of "${displayName(variant)}" in stock`
     );
   }
   if (wantedQuantity > MAX_QUANTITY_PER_ITEM) {
@@ -33,60 +37,49 @@ export const getCart = async (req, res) => {
   await sendCart(res, req.user.id);
 };
 
-// POST /cart/items  { productId, quantity }
+// POST /cart/items  { productId, variantId?, quantity }
 export const addItem = async (req, res) => {
 
   const userId = req.user.id;
-  const { productId, quantity } = req.body;
+  const { productId, variantId, quantity } = req.body;
 
-  const product = await productService.getProductById(productId);
+  const variant = await cartService.resolveVariant(productId, variantId);
 
-  if (!product) {
-    throw new AppError(404, "Product not found");
-  }
+  const alreadyInCart = await cartService.getCartItemQuantity(userId, variant.id);
+  checkAvailable(variant, alreadyInCart + quantity);
 
-  const alreadyInCart = await cartService.getCartItemQuantity(userId, productId);
-  checkAvailable(product, alreadyInCart + quantity);
-
-  await cartService.addCartItem(userId, productId, quantity);
+  await cartService.addCartItem(userId, productId, variant.id, quantity);
 
   await sendCart(res, userId);
 };
 
-// PATCH /cart/items/:productId  { quantity }
+// PATCH /cart/items/:id  { quantity }   (id = a variant id, or a product id if unambiguous)
 export const updateItem = async (req, res) => {
 
   const userId = req.user.id;
-  const { productId } = req.params;
-  const { quantity } = req.body;
+  const line = await cartService.findCartLine(userId, req.params.id);
 
-  const product = await productService.getProductById(productId);
-
-  if (!product) {
-    throw new AppError(404, "Product not found");
-  }
-
-  checkAvailable(product, quantity);
-
-  const updated = await cartService.setCartItemQuantity(userId, productId, quantity);
-
-  if (!updated) {
+  if (!line) {
     throw new AppError(404, "This product is not in your cart");
   }
+
+  checkAvailable(line, req.body.quantity);
+  await cartService.setCartItemQuantity(userId, line.variant_id, req.body.quantity);
 
   await sendCart(res, userId);
 };
 
-// DELETE /cart/items/:productId
+// DELETE /cart/items/:id
 export const removeItem = async (req, res) => {
 
   const userId = req.user.id;
+  const line = await cartService.findCartLine(userId, req.params.id);
 
-  const removed = await cartService.removeCartItem(userId, req.params.productId);
-
-  if (!removed) {
+  if (!line) {
     throw new AppError(404, "This product is not in your cart");
   }
+
+  await cartService.removeCartItem(userId, line.variant_id);
 
   await sendCart(res, userId);
 };

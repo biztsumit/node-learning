@@ -9,6 +9,7 @@ import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
 import { enqueue } from "../jobs/queue.js";
 import { getAddress } from "./address.services.js";
 import { processRefund, requestRefund } from "./refund.services.js";
+import { optionsLabel } from "./variant.services.js";
 
 // ---------- Reading orders ----------
 
@@ -36,7 +37,12 @@ const toOrder = (order, items, { includeCustomer }) => ({
   }),
   items: items.map((item) => ({
     productId: item.product_id,
+    variantId: item.variant_id,
     productName: item.product_name,
+    // What was chosen, as it was at the time of the order (snapshot)
+    options: item.variant_options,
+    optionsLabel: optionsLabel(item.variant_options),
+    sku: item.sku,
     unitPrice: item.unit_price,
     quantity: item.quantity,
     lineTotal: item.line_total
@@ -74,7 +80,7 @@ export const getOrderById = async (orderId, { userId } = {}) => {
   }
 
   const { rows: items } = await pool.query(
-    `SELECT product_id, product_name, unit_price, quantity, line_total
+    `SELECT product_id, variant_id, product_name, variant_options, sku, unit_price, quantity, line_total
      FROM order_items
      WHERE order_id = $1
      ORDER BY id`,
@@ -223,17 +229,25 @@ export const checkout = async (userId, { addressId } = {}) => {
     //    Another checkout that wants the same products now has to wait until we finish,
     //    so two customers can't both buy the last item.
     //    ORDER BY p.id: everyone locks products in the same order, which prevents deadlocks.
+    //    Stock lives on the VARIANT, and changing it makes a trigger update the product's
+    //    summary row too. So this locks the cart lines, the products AND the variants, all
+    //    in one fixed order (product, then variant): two checkouts can never hold locks the
+    //    other one is waiting for (no deadlocks).
     const { rows: cart } = await client.query(
       `SELECT
          ci.product_id,
+         ci.variant_id,
          ci.quantity,
          p.name,
-         p.price,
-         p.stock
+         v.price,
+         v.stock,
+         v.options,
+         v.sku
        FROM cart_items ci
        JOIN products p ON p.id = ci.product_id
+       JOIN product_variants v ON v.id = ci.variant_id
        WHERE ci.user_id = $1
-       ORDER BY p.id
+       ORDER BY p.id, v.id
        FOR UPDATE`,
       [userId]
     );
@@ -245,12 +259,16 @@ export const checkout = async (userId, { addressId } = {}) => {
     // 2. Check stock for every item, and report all problems at once
     const problems = cart
       .filter((item) => item.quantity > item.stock)
-      .map((item) => ({
-        field: `productId:${item.product_id}`,
-        message: item.stock === 0
-          ? `"${item.name}" is out of stock`
-          : `Only ${item.stock} of "${item.name}" left (you have ${item.quantity} in your cart)`
-      }));
+      .map((item) => {
+        const label = optionsLabel(item.options);
+        const name = label ? `${item.name} (${label})` : item.name;
+        return {
+          field: `variantId:${item.variant_id}`,
+          message: item.stock === 0
+            ? `"${name}" is out of stock`
+            : `Only ${item.stock} of "${name}" left (you have ${item.quantity} in your cart)`
+        };
+      });
 
     if (problems.length > 0) {
       throw new AppError(409, "Some items in your cart are no longer available", problems);
@@ -265,17 +283,19 @@ export const checkout = async (userId, { addressId } = {}) => {
     await enqueue("order-email", { orderId: order.id, type: "placed" }, { client });
 
     for (const item of cart) {
-      // 4. Copy each product's name and price into the order (the snapshot)
+      // 4. Copy the product's name, the chosen options, SKU and price into the order (the snapshot)
       await client.query(
-        `INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity, line_total)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [order.id, item.product_id, item.name, item.price, item.quantity, item.price * item.quantity]
+        `INSERT INTO order_items
+           (order_id, product_id, variant_id, product_name, variant_options, sku, unit_price, quantity, line_total)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [order.id, item.product_id, item.variant_id, item.name, item.options, item.sku,
+          item.price, item.quantity, item.price * item.quantity]
       );
 
-      // 5. Take the items out of stock
+      // 5. Take the items out of stock (the trigger updates the product's total)
       await client.query(
-        "UPDATE products SET stock = stock - $1 WHERE id = $2",
-        [item.quantity, item.product_id]
+        "UPDATE product_variants SET stock = stock - $1 WHERE id = $2",
+        [item.quantity, item.variant_id]
       );
     }
 
@@ -310,25 +330,26 @@ const lockOrder = async (client, orderId, userId) => {
 
 // Puts a cancelled order's items back in stock
 const restoreStock = async (client, orderId) => {
-  // Lock the products first, in id order, like checkout does (prevents deadlocks)
-  await client.query(
-    `SELECT p.id
-     FROM products p
-     JOIN order_items oi ON oi.product_id = p.id
+  // Lock the products and variants first, in the same order checkout uses (prevents deadlocks)
+  const { rows: lines } = await client.query(
+    `SELECT v.id AS variant_id, oi.quantity
+     FROM order_items oi
+     JOIN product_variants v ON v.id = oi.variant_id
+     JOIN products p ON p.id = v.product_id
      WHERE oi.order_id = $1
-     ORDER BY p.id
-     FOR UPDATE OF p`,
+     ORDER BY p.id, v.id
+     FOR UPDATE OF p, v`,
     [orderId]
   );
 
-  // Items whose product was deleted have product_id NULL, so they're simply skipped
-  await client.query(
-    `UPDATE products p
-     SET stock = p.stock + oi.quantity
-     FROM order_items oi
-     WHERE oi.order_id = $1 AND p.id = oi.product_id`,
-    [orderId]
-  );
+  // One variant at a time, in that order. Lines whose variant was deleted (variant_id NULL)
+  // aren't in the list: there's nothing to put the stock back into.
+  for (const line of lines) {
+    await client.query(
+      "UPDATE product_variants SET stock = stock + $1 WHERE id = $2",
+      [line.quantity, line.variant_id]
+    );
+  }
 };
 
 // cancelReason: who/what cancelled it ("customer", "admin" or "payment_timeout")

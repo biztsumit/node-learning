@@ -10,18 +10,15 @@ const quantitySchema = z
   .min(1, { error: "quantity must be at least 1" })
   .max(MAX_QUANTITY_PER_ITEM, { error: `quantity must be at most ${MAX_QUANTITY_PER_ITEM}` });
 
-// POST /cart/items
+// POST /cart/items — variantId picks the option (size, colour...). It can be left out
+// for a product that has only one variant.
 export const addCartItemSchema = z.object({
   productId: idSchema("productId"),
+  variantId: idSchema("variantId").optional(),
   quantity: quantitySchema.default(1)
 });
 
-// PATCH /cart/items/:productId
+// PATCH /cart/items/:id
 export const updateCartItemSchema = z.object({
   quantity: quantitySchema
-});
-
-// For routes like /cart/items/:productId
-export const productIdParamSchema = z.object({
-  productId: idSchema("productId")
 });
