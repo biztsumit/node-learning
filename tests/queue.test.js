@@ -3,6 +3,8 @@ import crypto from "node:crypto";
 import { describe, it, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { enqueue, startQueue, stopQueue } from "../src/jobs/queue.js";
+import { sentEmails } from "../src/emails/transport.js";
+import { withTransaction } from "../src/db/transaction.js";
 import {
   api, pool, resetDatabase, closeDatabase,
   createUser, createProduct, createAddress, placeOrder
@@ -98,6 +100,48 @@ describe("job queue (pg-boss)", () => {
     const maintenance = schedules.filter((s) => s.name === "maintenance");
     assert.equal(maintenance.length, 1);
     assert.equal(maintenance[0].cron, "* * * * *");
+  });
+
+  it("a job queued inside a transaction exists only if that transaction commits", async () => {
+    const count = async () =>
+      (await pool.query("SELECT COUNT(*)::int AS n FROM pgboss.job WHERE name = 'order-email'")).rows[0].n;
+    const before = await count();
+    const job = { orderId: crypto.randomUUID(), type: "placed" };
+
+    await assert.rejects(
+      withTransaction(async (client) => {
+        await enqueue("order-email", job, { client });
+        throw new Error("something later in the transaction fails");
+      }),
+      /something later/
+    );
+    assert.equal(await count(), before, "the job must disappear with the rollback");
+
+    await withTransaction(async (client) => {
+      await enqueue("order-email", job, { client });
+    });
+    assert.equal(await count(), before + 1);
+  });
+
+  it("a successful checkout queues its email and a worker sends it; a refused one queues none", async () => {
+    const orderEmailJobs = async () =>
+      (await pool.query("SELECT COUNT(*)::int AS n FROM pgboss.job WHERE name = 'order-email'")).rows[0].n;
+    const user = await createUser();
+    await createAddress(user);
+    const lamp = await createProduct({ stock: 3 });
+
+    // A checkout that fails (out of stock) and rolls back
+    await api().post("/cart/items").set(user.auth).send({ productId: lamp.id, quantity: 3 }).expect(200);
+    await pool.query("UPDATE products SET stock = 1 WHERE id = $1", [lamp.id]);
+    const before = await orderEmailJobs();
+    await api().post("/orders").set(user.auth).send({}).expect(409);
+    assert.equal(await orderEmailJobs(), before, "no email job may survive a rollback");
+
+    // A checkout that commits: its email job exists and a worker sends it
+    await api().patch(`/cart/items/${lamp.id}`).set(user.auth).send({ quantity: 1 }).expect(200);
+    const order = (await api().post("/orders").set(user.auth).send({}).expect(201)).body.data;
+    assert.equal(await orderEmailJobs(), before + 1);
+    await waitFor(() => sentEmails.some((e) => e.subject === `We've got your order ${order.orderNumber}`));
   });
 
   it("maintenance cancels expired orders when it runs", async () => {

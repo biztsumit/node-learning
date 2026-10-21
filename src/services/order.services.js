@@ -6,6 +6,7 @@ import { AppError } from "../utils/app-error.js";
 import { canChangeStatus } from "../utils/order-status.js";
 import { orderNumbers } from "../utils/order-number.js";
 import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
+import { enqueue } from "../jobs/queue.js";
 import { getAddress } from "./address.services.js";
 import { processRefund, requestRefund } from "./refund.services.js";
 
@@ -260,6 +261,9 @@ export const checkout = async (userId, { addressId } = {}) => {
 
     const order = await insertOrderWithNumber(client, [userId, totalAmount, shippingAddress]);
 
+    // Queued inside the transaction: if anything below fails, there's no "order placed" email
+    await enqueue("order-email", { orderId: order.id, type: "placed" }, { client });
+
     for (const item of cart) {
       // 4. Copy each product's name and price into the order (the snapshot)
       await client.query(
@@ -337,6 +341,9 @@ const applyStatus = async (client, orderId, newStatus, { cancelReason = null } =
     "UPDATE orders SET status = $1, cancel_reason = $3, updated_at = NOW() WHERE id = $2",
     [newStatus, orderId, newStatus === "cancelled" ? cancelReason : null]
   );
+
+  // Part of this transaction: sent only if the change is saved
+  await enqueue("order-email", { orderId, type: newStatus }, { client });
 };
 
 // A customer cancelling their own order: only while it's still pending

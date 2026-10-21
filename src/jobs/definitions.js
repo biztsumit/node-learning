@@ -2,7 +2,9 @@
 import { logger } from "../config/logger.js";
 import { deleteOldIdempotencyKeys } from "../middlewares/idempotency.middleware.js";
 import { deleteImage } from "../services/cloudinary.client.js";
-import { expireUnpaidOrders } from "../services/order.services.js";
+import { buildOrderEmail } from "../emails/order-emails.js";
+import { sendEmail } from "../emails/transport.js";
+import { expireUnpaidOrders, getOrderById } from "../services/order.services.js";
 import { retryPendingRefunds } from "../services/refund.services.js";
 
 export const JOBS = {
@@ -15,6 +17,20 @@ export const JOBS = {
     run: async ({ publicId }) => {
       await deleteImage(publicId);
       logger.info({ publicId }, "Deleted old product image from Cloudinary");
+    }
+  },
+
+  // Tell the customer about their order: placed, paid, shipped, delivered, cancelled, refunded.
+  // The order is read when the job RUNS, so the email shows its latest state.
+  "order-email": {
+    queue: { retryLimit: 5, retryDelay: 60, retryBackoff: true },
+    run: async ({ orderId, type }) => {
+      const order = await getOrderById(orderId);
+      if (!order) {
+        logger.warn({ orderId, type }, "Order email skipped: order no longer exists");
+        return;
+      }
+      await sendEmail(buildOrderEmail(type, order));
     }
   },
 

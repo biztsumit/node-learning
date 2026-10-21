@@ -2,6 +2,7 @@ import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
 import { withTransaction } from "../db/transaction.js";
 import { AppError } from "../utils/app-error.js";
+import { enqueue } from "../jobs/queue.js";
 import * as razorpay from "./razorpay.client.js";
 import { processRefund, recordRefundEvent, requestRefund } from "./refund.services.js";
 
@@ -128,6 +129,7 @@ const recordSuccessfulPayment = async (client, { providerOrderId, providerPaymen
       "UPDATE orders SET status = 'paid', updated_at = NOW() WHERE id = $1",
       [payment.order_id]
     );
+    await enqueue("order-email", { orderId: payment.order_id, type: "paid" }, { client });
     return { result: "paid", orderId: payment.order_id };
   }
 

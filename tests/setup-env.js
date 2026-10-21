@@ -18,6 +18,11 @@ process.env.RAZORPAY_KEY_ID = "rzp_test_AUTOMATEDTESTS";
 process.env.RAZORPAY_KEY_SECRET = "test_key_secret";
 process.env.RAZORPAY_WEBHOOK_SECRET = "test_webhook_secret";
 
+// Tests NEVER send real email, whatever .env says: "log" mode keeps them in memory
+process.env.EMAIL_TRANSPORT = "log";
+process.env.BREVO_API_KEY = "";
+process.env.EMAIL_REDIRECT_TO = "";
+
 // Fake Cloudinary account. The upload tests intercept calls to Cloudinary, too.
 process.env.CLOUDINARY_CLOUD_NAME = "test-cloud";
 process.env.CLOUDINARY_API_KEY = "111111111111111";

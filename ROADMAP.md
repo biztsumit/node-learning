@@ -71,7 +71,7 @@ Ordered so each phase builds on the previous one. ⭐ = recommended next.
 ## Phase 9 — Background work, Redis and email
 
 - [x] 9.1 Job queue on PostgreSQL (pg-boss): retries with backoff, scheduled maintenance that runs once across all servers
-- [ ] 9.2 Emails: order confirmation, shipped, delivered (templates, sent by the queue)
+- [x] 9.2 Order emails (placed, paid, shipped, delivered, cancelled, refunded): queued inside the transaction; "log" mode or Brevo
 - [ ] 9.3 Forgot password and email verification with one-time, hashed, expiring tokens
 - [ ] 9.4 Caching hot reads (categories, product lists) with invalidation; Redis-backed rate limits for several servers
 

@@ -10,6 +10,7 @@
 import pool from "../config/db.js";
 import { logger } from "../config/logger.js";
 import { withTransaction } from "../db/transaction.js";
+import { enqueue } from "../jobs/queue.js";
 import * as razorpay from "./razorpay.client.js";
 
 // Give up retrying after this many calls; then a person has to look at it (it's logged)
@@ -30,11 +31,19 @@ export const requestRefund = async (client, paymentId, reason) => {
   return rows[0]?.id ?? null;
 };
 
-const markPaymentRefunded = (client, refundId) =>
-  client.query(
-    "UPDATE payments SET status = 'refunded', updated_at = NOW() WHERE id = (SELECT payment_id FROM refunds WHERE id = $1)",
+// Marks the payment refunded and, in the same transaction, queues the "refund processed" email
+const markPaymentRefunded = async (client, refundId) => {
+  const { rows: [payment] } = await client.query(
+    `UPDATE payments SET status = 'refunded', updated_at = NOW()
+     WHERE id = (SELECT payment_id FROM refunds WHERE id = $1) AND status <> 'refunded'
+     RETURNING order_id`,
     [refundId]
   );
+  // Only the first time: a repeated "processed" webhook doesn't send a second email
+  if (payment) {
+    await enqueue("order-email", { orderId: payment.order_id, type: "refunded" }, { client });
+  }
+};
 
 // Step 2. Safe to call any number of times, from anywhere, even at the same moment.
 export const processRefund = async (refundId) => {

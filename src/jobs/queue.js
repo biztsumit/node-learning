@@ -40,18 +40,34 @@ export const startQueue = async ({ pollingIntervalSeconds = 2, queueOverrides = 
   return boss;
 };
 
-// Adds a job to the queue. Without a running queue (tests, scripts), it runs the job right
-// away instead, so the same code works everywhere; a failure is then thrown to the caller.
-export const enqueue = async (name, data = {}, options = {}) => {
+// Adds a job to the queue.
+//
+// Pass { client } from withTransaction to make the job part of that transaction:
+//   - with a running queue, the job row is inserted THROUGH that client, so it's saved
+//     only if the transaction commits (a rolled-back order never sends an email);
+//   - without one, it runs right after the commit (and not at all on a rollback).
+//
+// Without a running queue (tests, scripts) and without a client, it runs right away,
+// so the same code works everywhere; a failure is then thrown to the caller.
+export const enqueue = async (name, data = {}, { client, ...options } = {}) => {
   const job = JOBS[name];
   if (!job) {
     throw new Error(`Unknown job "${name}"`);
   }
+
   if (!boss) {
+    if (client) {
+      client.afterCommit(() => job.run(data));
+      return null;
+    }
     await job.run(data);
     return null;
   }
-  return boss.send(name, data, options);
+
+  return boss.send(name, data, {
+    ...options,
+    ...(client && { db: { executeSql: (text, values) => client.query(text, values) } })
+  });
 };
 
 // Graceful shutdown: let running jobs finish (up to 10 s), then close the queue's connections

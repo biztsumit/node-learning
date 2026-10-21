@@ -35,6 +35,18 @@ const envSchema = z.object({
   ORDER_PAYMENT_TIMEOUT_MINUTES: z.coerce.number().int().min(1).default(3 * 24 * 60),
   // (The check runs once a minute as the "maintenance" job: see src/jobs/definitions.js)
 
+  // Emails. "log" (default) doesn't send anything: it logs each email and, outside tests,
+  // saves it as an HTML file in .emails/ so you can open it in a browser.
+  // "brevo" really sends them (free plan: 300/day). https://www.brevo.com
+  EMAIL_TRANSPORT: z.enum(["log", "brevo"]).default("log"),
+  BREVO_API_KEY: z.string().min(1).optional(),
+  // The sender. With Brevo it must be a sender you've verified in their dashboard.
+  EMAIL_FROM_ADDRESS: z.email().default("orders@example.com"),
+  EMAIL_FROM_NAME: z.string().min(1).default("Shop"),
+  // Development / staging safety net: send EVERY email to this address instead of the real
+  // customer (the subject says who it was meant for). Never set it in production.
+  EMAIL_REDIRECT_TO: z.email().optional(),
+
   // Image uploads (optional): without these the app runs, but upload routes answer 503.
   // All three are on the Cloudinary dashboard: https://console.cloudinary.com
   CLOUDINARY_CLOUD_NAME: z.string().regex(/^[a-z0-9_-]+$/i, { error: "must be your Cloudinary cloud name" }).optional(),
@@ -68,6 +80,9 @@ const envSchema = z.object({
   NGROK_DOMAIN: z.string().min(1).optional()
 })
   .superRefine((settings, ctx) => {
+    if (settings.EMAIL_TRANSPORT === "brevo" && !settings.BREVO_API_KEY) {
+      ctx.addIssue({ code: "custom", path: ["BREVO_API_KEY"], message: "required when EMAIL_TRANSPORT=brevo" });
+    }
     if (settings.DATABASE_URL) {
       return;
     }
