@@ -14,7 +14,9 @@ beforeEach(async () => {
 });
 after(closeDatabase);
 
-const subjects = () => sentEmails.map((e) => e.subject);
+// Registering also sends a "confirm your email" email; these tests are about order emails only
+const orderEmails = () => sentEmails.filter((e) => !e.subject.includes("confirm your email"));
+const subjects = () => orderEmails().map((e) => e.subject);
 
 const customerWithOrder = async ({ productName = "Ceramic Mug", price = 250, quantity = 2, stock = 10 } = {}) => {
   const user = await createUser({ name: "Riya Sharma" });
@@ -29,8 +31,8 @@ describe("order emails", () => {
   it("tell the customer their order was placed, with items, total and the pay-by date", async () => {
     const { user, order } = await customerWithOrder();
 
-    assert.equal(sentEmails.length, 1);
-    const [email] = sentEmails;
+    assert.equal(orderEmails().length, 1);
+    const [email] = orderEmails();
     assert.equal(email.to, user.email);
     assert.equal(email.subject, `We've got your order ${order.orderNumber}`);
     assert.match(email.html, /Ceramic Mug × 2/);
@@ -48,7 +50,7 @@ describe("order emails", () => {
     await pool.query("UPDATE products SET stock = 1 WHERE id = $1", [lamp.id]);
 
     await api().post("/orders").set(user.auth).send({}).expect(409);
-    assert.deepEqual(sentEmails, []);
+    assert.deepEqual(orderEmails(), []);
   });
 
   it("follow the order through paid, shipped and delivered", async () => {
@@ -68,12 +70,12 @@ describe("order emails", () => {
   it("explain why an order was cancelled", async () => {
     const byCustomer = await customerWithOrder();
     await api().post(`/orders/${byCustomer.order.id}/cancel`).set(byCustomer.user.auth).expect(200);
-    assert.match(sentEmails.at(-1).html, /You cancelled this order/);
+    assert.match(orderEmails().at(-1).html, /You cancelled this order/);
 
     const unpaid = await customerWithOrder();
     await pool.query("UPDATE orders SET created_at = NOW() - INTERVAL '30 days' WHERE id = $1", [unpaid.order.id]);
     await expireUnpaidOrders();
-    const email = sentEmails.at(-1);
+    const email = orderEmails().at(-1);
     assert.equal(email.subject, `Order ${unpaid.order.orderNumber} cancelled`);
     assert.match(email.html, /didn't receive payment in time/);
   });
@@ -95,7 +97,7 @@ describe("order emails", () => {
     env.EMAIL_REDIRECT_TO = "developer@example.com";
     try {
       const { user, order } = await customerWithOrder();
-      const [email] = sentEmails;
+      const email = orderEmails().find((e) => e.subject.includes("We've got your order"));
       assert.equal(email.to, "developer@example.com");
       assert.equal(email.subject, `[to ${user.email}] We've got your order ${order.orderNumber}`);
     } finally {

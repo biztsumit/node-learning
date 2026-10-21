@@ -72,8 +72,8 @@ Ordered so each phase builds on the previous one. ⭐ = recommended next.
 
 - [x] 9.1 Job queue on PostgreSQL (pg-boss): retries with backoff, scheduled maintenance that runs once across all servers
 - [x] 9.2 Order emails (placed, paid, shipped, delivered, cancelled, refunded): queued inside the transaction; "log" mode or Brevo
-- [ ] 9.3 Forgot password and email verification with one-time, hashed, expiring tokens
-- [ ] 9.4 Caching hot reads (categories, product lists) with invalidation; Redis-backed rate limits for several servers
+- [x] 9.3 Forgot password and email verification: one-time, hashed, expiring tokens; no account enumeration
+- [x] 9.4 In-memory caching of catalog reads, cleared on any change via PostgreSQL LISTEN/NOTIFY (Redis-backed rate limits: later, if running several servers)
 
 ## Phase 10 — A richer store
 

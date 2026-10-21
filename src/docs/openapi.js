@@ -4,7 +4,7 @@
 // to validate, so the docs can't drift away from what the API really accepts.
 import { z } from "zod";
 import { MAX_QUANTITY_PER_ITEM, addCartItemSchema, updateCartItemSchema } from "../validators/cart.validators.js";
-import { registerSchema, loginSchema, updateProfileSchema, changePasswordSchema } from "../validators/auth.validators.js";
+import { registerSchema, loginSchema, updateProfileSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, verifyEmailSchema } from "../validators/auth.validators.js";
 import { categorySchema } from "../validators/category.validators.js";
 import { productSchema, productListQuerySchema } from "../validators/product.validators.js";
 import { createAddressSchema, updateAddressSchema } from "../validators/address.validators.js";
@@ -168,6 +168,35 @@ export const openApiDocument = {
           ...ok("Password changed", { type: "object", properties: { token: { type: "string" } } }),
           ...errors(400, 401, 429)
         }
+      }
+    },
+    "/auth/forgot-password": {
+      post: {
+        tags: ["Auth"], summary: "Email me a link to reset my password", ...PUBLIC,
+        description: "Always answers the same way, whether or not the email has an account, so nobody can use it to find out who's a customer. The link works once and expires in 1 hour.",
+        requestBody: jsonBody(forgotPasswordSchema),
+        responses: { ...message("Link sent if the account exists"), ...errors(400, 429) }
+      }
+    },
+    "/auth/reset-password": {
+      post: {
+        tags: ["Auth"], summary: "Set a new password with the emailed link's token", ...PUBLIC,
+        description: "Logs out every device. The token is the `token` part of the link in the email.",
+        requestBody: jsonBody(resetPasswordSchema),
+        responses: { ...message("Password changed"), ...errors(400, 429) }
+      }
+    },
+    "/auth/verify-email": {
+      post: {
+        tags: ["Auth"], summary: "Confirm my email address with the emailed link's token", ...PUBLIC,
+        requestBody: jsonBody(verifyEmailSchema),
+        responses: { ...message("Email verified"), ...errors(400, 429) }
+      }
+    },
+    "/auth/resend-verification": {
+      post: {
+        tags: ["Auth"], summary: "Send me a new email-verification link", ...LOGGED_IN,
+        responses: { ...message("New link sent"), ...errors(401, 409, 429) }
       }
     },
     "/auth/logout-all": {
@@ -461,7 +490,8 @@ export const openApiDocument = {
         type: "object",
         properties: {
           id: UUID, name: { type: "string" }, email: { type: "string", format: "email" },
-          role: { type: "string", enum: ["user", "admin"] }, created_at: { type: "string", format: "date-time" }
+          role: { type: "string", enum: ["user", "admin"] }, created_at: { type: "string", format: "date-time" },
+          email_verified: { type: "boolean", description: "Has the user clicked the link in the verification email?" }
         }
       },
       AuthResult: {

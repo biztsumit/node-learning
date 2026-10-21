@@ -1,7 +1,9 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import * as accountService from "../services/account.services.js";
 import * as userService from "../services/user.services.js";
 import { env } from "../config/env.js";
+import { logger } from "../config/logger.js";
 import { AppError } from "../utils/app-error.js";
 import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
 
@@ -33,12 +35,66 @@ export const register = async (req, res) => {
     throw err;
   }
 
+  // Ask them to confirm their email. If that fails, the account still exists, and they
+  // can ask for a new link with POST /auth/resend-verification.
+  try {
+    await accountService.sendVerificationEmail(user.id);
+  } catch (err) {
+    logger.error({ err, userId: user.id }, "Could not send the verification email");
+  }
+
   res.status(201).json({
     success: true,
     data: {
-      user,
+      user: { ...user, email_verified: false },
       token: createToken(user)
     }
+  });
+};
+
+// POST /auth/forgot-password  { email }
+// Always the same answer, whether or not the email has an account. Otherwise this form
+// would tell anyone which email addresses are customers of the shop.
+export const forgotPassword = async (req, res) => {
+
+  await accountService.requestPasswordReset(req.body.email);
+
+  res.json({
+    success: true,
+    message: "If an account exists for that email, we've sent a link to reset the password"
+  });
+};
+
+// POST /auth/reset-password  { token, newPassword }
+export const resetPassword = async (req, res) => {
+
+  await accountService.resetPassword(req.body.token, req.body.newPassword);
+
+  res.json({
+    success: true,
+    message: "Password changed. You've been logged out everywhere; log in with the new password"
+  });
+};
+
+// POST /auth/verify-email  { token }
+export const verifyEmail = async (req, res) => {
+
+  await accountService.verifyEmail(req.body.token);
+
+  res.json({
+    success: true,
+    message: "Thanks, your email address is verified"
+  });
+};
+
+// POST /auth/resend-verification (logged in)
+export const resendVerification = async (req, res) => {
+
+  await accountService.sendVerificationEmail(req.user.id);
+
+  res.json({
+    success: true,
+    message: "We've sent you a new verification link"
   });
 };
 

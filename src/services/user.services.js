@@ -10,7 +10,7 @@ export const findUserByEmail = async (email) => {
 
 export const findUserById = async (id) => {
   const { rows } = await pool.query(
-    "SELECT id, name, email, role, created_at FROM users WHERE id = $1",
+    "SELECT id, name, email, role, created_at, email_verified_at IS NOT NULL AS email_verified FROM users WHERE id = $1",
     [id]
   );
   return rows[0];

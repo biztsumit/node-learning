@@ -1,4 +1,5 @@
 import * as productService from "../services/product.services.js";
+import { cacheKey, catalogCache } from "../cache/catalog-cache.js";
 import { AppError } from "../utils/app-error.js";
 import { PG_FOREIGN_KEY_VIOLATION } from "../utils/db-errors.js";
 
@@ -12,9 +13,21 @@ const handleDbError = (err) => {
   throw err;
 };
 
+// Public reads are cached. X-Cache: HIT means it came from memory, MISS from the database.
+// (Changes clear the cache straight away; see src/cache/invalidation.js)
+const cached = async (res, key, load) => {
+  const { value, hit } = await catalogCache.wrap(key, load);
+  if (catalogCache.enabled) {
+    res.set("X-Cache", hit ? "HIT" : "MISS");
+  }
+  return value;
+};
+
 export const getProducts = async (req, res) => {
 
-  const { products, pagination } = await productService.findProducts(req.query);
+  const { products, pagination } = await cached(res, cacheKey("products", req.query), () =>
+    productService.findProducts(req.query)
+  );
 
   res.json({
     success: true,
@@ -25,7 +38,9 @@ export const getProducts = async (req, res) => {
 
 export const getProduct = async (req, res) => {
 
-  const product = await productService.getProductById(req.params.id);
+  const product = await cached(res, `product:${req.params.id}`, () =>
+    productService.getProductById(req.params.id)
+  );
 
   if (!product) {
     throw new AppError(404, "Product not found");
@@ -39,7 +54,9 @@ export const getProduct = async (req, res) => {
 
 export const getProductBySlug = async (req, res) => {
 
-  const product = await productService.getProductBySlug(req.params.slug);
+  const product = await cached(res, `product-slug:${req.params.slug}`, () =>
+    productService.getProductBySlug(req.params.slug)
+  );
 
   if (!product) {
     throw new AppError(404, "Product not found");

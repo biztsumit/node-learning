@@ -60,6 +60,14 @@ export const failedLoginLimiter = limiter({
   skipSuccessfulRequests: true
 });
 
+// "Forgot password" / "resend verification": each one sends an email. Without a limit,
+// anyone could flood someone's inbox, or burn through the daily email quota.
+export const emailLimiter = limiter({
+  windowMs: 60 * 60 * 1000,
+  limit: env.EMAIL_RATE_LIMIT,
+  message: "Too many emails requested. Please try again later"
+});
+
 // Sign-ups: stops scripts from creating thousands of fake accounts
 export const signupLimiter = limiter({
   windowMs: 60 * 60 * 1000,

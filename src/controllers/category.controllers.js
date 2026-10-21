@@ -1,4 +1,5 @@
 import * as categoryService from "../services/category.services.js";
+import { catalogCache } from "../cache/catalog-cache.js";
 import { AppError } from "../utils/app-error.js";
 import { PG_UNIQUE_VIOLATION, PG_RESTRICT_VIOLATION } from "../utils/db-errors.js";
 
@@ -17,7 +18,11 @@ const handleDbError = (err) => {
 
 export const getCategories = async (req, res) => {
 
-  const categories = await categoryService.getAllCategories();
+  // Cached like products (X-Cache: HIT / MISS)
+  const { value: categories, hit } = await catalogCache.wrap("categories", () => categoryService.getAllCategories());
+  if (catalogCache.enabled) {
+    res.set("X-Cache", hit ? "HIT" : "MISS");
+  }
 
   res.json({
     success: true,

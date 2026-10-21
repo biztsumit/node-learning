@@ -4,6 +4,7 @@ import app from "./app.js";
 import pool, { connectDB } from "./config/db.js";
 import { startTunnel } from "./tunnel.js";
 import { startQueue, stopQueue } from "./jobs/queue.js";
+import { startCacheInvalidation, stopCacheInvalidation } from "./cache/invalidation.js";
 
 const PORT = env.PORT;
 
@@ -32,6 +33,7 @@ const shutdown = (server) => (signal) => {
 
   server.close(async () => {
     await stopQueue();      // running jobs finish first (they use the database)...
+    await stopCacheInvalidation();
     await pool.end();       // ...then the database connections close
     logger.info("Shutdown complete");
     process.exit(0);
@@ -44,6 +46,8 @@ const startServer = async () => {
     // Background jobs (started here, not in app.js, so tests that import the app
     // don't get workers running behind their backs)
     await startQueue();
+    // Clears the catalog cache whenever products/categories/reviews change (on any server)
+    await startCacheInvalidation();
   } catch (err) {
     logger.fatal({ err }, "Failed to start: database or job queue unavailable");
     process.exit(1);

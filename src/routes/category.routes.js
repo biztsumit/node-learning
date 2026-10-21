@@ -7,11 +7,15 @@ import {
   deleteCategory
 } from "../controllers/category.controllers.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.js";
+import { clearCatalogCacheOnWrite } from "../middlewares/cache.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import { idParamSchema } from "../validators/common.validators.js";
 import { categorySchema } from "../validators/category.validators.js";
 
 const router = Router();
+
+// Any successful change to categories clears the catalog cache
+router.use(clearCatalogCacheOnWrite);
 
 // Public
 router.get("/", getCategories);

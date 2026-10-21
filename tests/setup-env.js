@@ -10,7 +10,12 @@ process.env.LOG_LEVEL = "silent";
 process.env.API_RATE_LIMIT = "100000";
 process.env.LOGIN_RATE_LIMIT = "100000";
 process.env.SIGNUP_RATE_LIMIT = "100000";
+process.env.EMAIL_RATE_LIMIT = "100000";
 process.env.TRUST_PROXY = "0";
+
+// Caching off: most tests change data with SQL and read it straight back. cache.test.js
+// switches it on for itself.
+process.env.CACHE_TTL_SECONDS = "0";
 process.env.CORS_ORIGINS = "http://localhost:5173";
 
 // Fake Razorpay keys. The payment tests intercept calls to Razorpay, so nothing leaves this machine.

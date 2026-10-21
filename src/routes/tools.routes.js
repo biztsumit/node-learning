@@ -16,6 +16,7 @@ router.use(
   })
 );
 
-router.use(express.static(path.join(import.meta.dirname, "../../public/tools")));
+// extensions: "/tools/reset-password" also finds reset-password.html (the email links use that)
+router.use(express.static(path.join(import.meta.dirname, "../../public/tools"), { extensions: ["html"] }));
 
 export default router;

@@ -2,7 +2,10 @@
 import { logger } from "../config/logger.js";
 import { deleteOldIdempotencyKeys } from "../middlewares/idempotency.middleware.js";
 import { deleteImage } from "../services/cloudinary.client.js";
+import { buildAuthEmail } from "../emails/auth-emails.js";
 import { buildOrderEmail } from "../emails/order-emails.js";
+import { deleteDeadTokens } from "../services/auth-token.services.js";
+import { findUserById } from "../services/user.services.js";
 import { sendEmail } from "../emails/transport.js";
 import { expireUnpaidOrders, getOrderById } from "../services/order.services.js";
 import { retryPendingRefunds } from "../services/refund.services.js";
@@ -34,6 +37,20 @@ export const JOBS = {
     }
   },
 
+  // "Reset your password" / "Verify your email". The job's data holds the RAW one-time token
+  // (it has to reach the email somehow), so these jobs are deleted 10 minutes after they're
+  // done, and dropped if still unsent after an hour (the reset link would have expired anyway).
+  "auth-email": {
+    queue: { retryLimit: 3, retryDelay: 30, retryBackoff: true, deleteAfterSeconds: 600, retentionSeconds: 3600 },
+    run: async ({ userId, type, token }) => {
+      const user = await findUserById(userId);
+      if (!user) {
+        return;
+      }
+      await sendEmail(buildAuthEmail(type, user, token));
+    }
+  },
+
   // Housekeeping, once a minute. The SCHEDULE lives in the database, so with several servers
   // pg-boss still creates just ONE job per minute, and "exclusive" means a new one can't
   // start while the previous one is still running.
@@ -44,9 +61,10 @@ export const JOBS = {
       const cancelled = await expireUnpaidOrders();
       const deletedKeys = await deleteOldIdempotencyKeys();
       const retriedRefunds = await retryPendingRefunds();
-      if (cancelled.length > 0 || deletedKeys > 0 || retriedRefunds > 0) {
+      const deletedTokens = await deleteDeadTokens();
+      if (cancelled.length > 0 || deletedKeys > 0 || retriedRefunds > 0 || deletedTokens > 0) {
         logger.info(
-          { cancelledOrders: cancelled.length, deletedIdempotencyKeys: deletedKeys, retriedRefunds },
+          { cancelledOrders: cancelled.length, deletedIdempotencyKeys: deletedKeys, retriedRefunds, deletedAuthTokens: deletedTokens },
           "Maintenance finished"
         );
       }

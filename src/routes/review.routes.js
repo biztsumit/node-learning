@@ -7,6 +7,7 @@ import {
   removeAnyReview
 } from "../controllers/review.controllers.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.js";
+import { clearCatalogCacheOnWrite } from "../middlewares/cache.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import { idParamSchema } from "../validators/common.validators.js";
 import {
@@ -31,5 +32,5 @@ productReviewRoutes.delete("/me", requireAuth, removeMyReview);
 // Mounted at /admin/reviews
 export const adminReviewRoutes = Router();
 
-adminReviewRoutes.use(requireAuth, requireAdmin);
+adminReviewRoutes.use(requireAuth, requireAdmin, clearCatalogCacheOnWrite);
 adminReviewRoutes.delete("/:id", validate({ params: idParamSchema }), removeAnyReview);

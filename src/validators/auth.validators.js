@@ -51,3 +51,28 @@ export const changePasswordSchema = z
     error: "newPassword must be different from currentPassword",
     path: ["newPassword"]
   });
+
+// One-time link tokens: 43 URL-safe characters (32 random bytes)
+const linkTokenSchema = z
+  .string({ error: "token is required" })
+  .trim()
+  .regex(/^[A-Za-z0-9_-]{20,200}$/, { error: "token is not valid" });
+
+// POST /auth/forgot-password
+export const forgotPasswordSchema = z.object({
+  email: emailSchema
+});
+
+// POST /auth/reset-password
+export const resetPasswordSchema = z.object({
+  token: linkTokenSchema,
+  newPassword: z
+    .string({ error: "newPassword is required" })
+    .min(6, { error: "newPassword must be at least 6 characters" })
+    .max(72, { error: "newPassword must be at most 72 characters" })
+});
+
+// POST /auth/verify-email
+export const verifyEmailSchema = z.object({
+  token: linkTokenSchema
+});

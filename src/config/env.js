@@ -30,6 +30,10 @@ const envSchema = z.object({
   RAZORPAY_KEY_SECRET: z.string().min(1).optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional(),
 
+  // How long public catalog reads (products, categories) may be served from memory.
+  // Changes clear the cache at once; this is only the upper limit. 0 turns caching off.
+  CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(60),
+
   // Unpaid orders are cancelled (and their stock released) after this many minutes.
   // Default 4320 = 3 days. Their items stay reserved for the whole time.
   ORDER_PAYMENT_TIMEOUT_MINUTES: z.coerce.number().int().min(1).default(3 * 24 * 60),
@@ -43,6 +47,9 @@ const envSchema = z.object({
   // The sender. With Brevo it must be a sender you've verified in their dashboard.
   EMAIL_FROM_ADDRESS: z.email().default("orders@example.com"),
   EMAIL_FROM_NAME: z.string().min(1).default("Shop"),
+  // Where "reset your password" / "verify your email" links point: your frontend's address.
+  // Default: the small tool pages this API serves in development.
+  APP_URL: z.url().default("http://localhost:3000/tools").transform((url) => url.replace(/\/+$/, "")),
   // Development / staging safety net: send EVERY email to this address instead of the real
   // customer (the subject says who it was meant for). Never set it in production.
   EMAIL_REDIRECT_TO: z.email().optional(),
@@ -74,6 +81,7 @@ const envSchema = z.object({
   API_RATE_LIMIT: z.coerce.number().int().min(1).default(120),      // requests per minute
   LOGIN_RATE_LIMIT: z.coerce.number().int().min(1).default(10),     // FAILED logins per 15 minutes
   SIGNUP_RATE_LIMIT: z.coerce.number().int().min(1).default(5),     // sign-ups per hour
+  EMAIL_RATE_LIMIT: z.coerce.number().int().min(1).default(5),      // "send me a link" emails per hour
 
   // ngrok (optional, development only): with a token, the server also gets a public https URL
   NGROK_AUTHTOKEN: z.string().min(1).optional(),
