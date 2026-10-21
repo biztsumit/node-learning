@@ -18,7 +18,7 @@ export const startPayment = async (userId, orderId) => {
 
     // Lock the order: two "Pay" clicks at once must not create two payment requests
     const { rows: [order] } = await client.query(
-      `SELECT o.id, o.status, o.total_amount, o.shipping_address->>'phone' AS phone,
+      `SELECT o.id, o.order_number, o.status, o.total_amount, o.shipping_address->>'phone' AS phone,
               o.created_at < NOW() - make_interval(mins => $3) AS expired,
               u.name, u.email
        FROM orders o
@@ -57,9 +57,9 @@ export const startPayment = async (userId, orderId) => {
         razorpayOrder = await razorpay.createRazorpayOrder({
           amount,
           currency: "INR",
-          // Razorpay allows at most 40 characters here; a UUID is 36
-          receipt: order.id,
-          notes: { orderId: String(order.id) }
+          // Shown in Razorpay's dashboard, so use the number people quote (max 40 characters)
+          receipt: order.order_number,
+          notes: { orderId: order.id, orderNumber: order.order_number }
         });
       } catch (err) {
         logger.error({ err, orderId: order.id }, "Razorpay order creation failed");

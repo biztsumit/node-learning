@@ -8,7 +8,7 @@ import { registerSchema, loginSchema, updateProfileSchema, changePasswordSchema 
 import { categorySchema } from "../validators/category.validators.js";
 import { productSchema, productListQuerySchema } from "../validators/product.validators.js";
 import { createAddressSchema, updateAddressSchema } from "../validators/address.validators.js";
-import { checkoutSchema, orderListQuerySchema, adminOrderListQuerySchema, updateOrderStatusSchema } from "../validators/order.validators.js";
+import { checkoutSchema, orderListQuerySchema, adminOrderListQuerySchema, updateOrderStatusSchema, orderNumberParamSchema } from "../validators/order.validators.js";
 import { verifyPaymentSchema } from "../validators/payment.validators.js";
 import { productImageSchema } from "../validators/upload.validators.js";
 import { createReviewSchema, updateReviewSchema, reviewListQuerySchema } from "../validators/review.validators.js";
@@ -340,6 +340,14 @@ export const openApiDocument = {
         responses: { ...ok("A page of orders", { type: "array", items: ref("OrderSummary") }, { pagination: true }), ...errors(400, 401) }
       }
     },
+    "/orders/number/{orderNumber}": {
+      get: {
+        tags: ["Orders"], summary: "One of my orders, by its order number", ...LOGGED_IN,
+        description: "Accepts `ORD-7K3M9Q`, `ord-7k3m9q` or just `7K3M9Q`.",
+        parameters: [{ name: "orderNumber", in: "path", required: true, schema: { ...fromZod(orderNumberParamSchema).properties.orderNumber, example: "ORD-7K3M9Q" } }],
+        responses: { ...ok("Order", ref("Order")), ...errors(400, 401, 404) }
+      }
+    },
     "/orders/{id}": {
       parameters: [pathId("id", "Order id")],
       get: { tags: ["Orders"], summary: "One of my orders", ...LOGGED_IN, responses: { ...ok("Order", ref("Order")), ...errors(401, 404) } }
@@ -523,7 +531,8 @@ export const openApiDocument = {
       OrderSummary: {
         type: "object",
         properties: {
-          id: UUID, status: { type: "string", enum: ORDER_STATUSES }, totalAmount: { type: "integer" },
+          id: UUID,
+          orderNumber: { type: "string", example: "ORD-7K3M9Q", description: "Short, random, easy to read out (no 0/O, 1/I/L, U)" }, status: { type: "string", enum: ORDER_STATUSES }, totalAmount: { type: "integer" },
           itemCount: { type: "integer" }, createdAt: { type: "string", format: "date-time" },
           customer: { type: "object", description: "Admin lists only", properties: { id: UUID, name: { type: "string" }, email: { type: "string" } } }
         }
@@ -532,6 +541,7 @@ export const openApiDocument = {
         type: "object",
         properties: {
           id: UUID,
+          orderNumber: { type: "string", example: "ORD-7K3M9Q", description: "Short, random, easy to read out (no 0/O, 1/I/L, U)" },
           status: { type: "string", enum: ORDER_STATUSES },
           totalAmount: { type: "integer", description: "Whole rupees" },
           createdAt: { type: "string", format: "date-time" },

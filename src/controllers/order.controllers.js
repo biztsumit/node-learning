@@ -44,6 +44,21 @@ export const getMyOrder = async (req, res) => {
   });
 };
 
+// GET /orders/number/:orderNumber
+export const getMyOrderByNumber = async (req, res) => {
+
+  const order = await orderService.getOrderByNumber(req.params.orderNumber, { userId: req.user.id });
+
+  if (!order) {
+    throw new AppError(404, "Order not found");
+  }
+
+  res.json({
+    success: true,
+    data: order
+  });
+};
+
 // POST /orders/:id/cancel
 export const cancelMyOrder = async (req, res) => {
 

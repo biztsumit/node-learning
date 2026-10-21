@@ -4,6 +4,8 @@ import { logger } from "../config/logger.js";
 import { withTransaction } from "../db/transaction.js";
 import { AppError } from "../utils/app-error.js";
 import { canChangeStatus } from "../utils/order-status.js";
+import { orderNumbers } from "../utils/order-number.js";
+import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
 import { getAddress } from "./address.services.js";
 import { processRefund, requestRefund } from "./refund.services.js";
 
@@ -12,6 +14,8 @@ import { processRefund, requestRefund } from "./refund.services.js";
 // Turns the order row + its item rows into the shape the API sends back
 const toOrder = (order, items, { includeCustomer }) => ({
   id: order.id,
+  // What customers see and quote ("ORD-7K3M9Q"); the id is for the API
+  orderNumber: order.order_number,
   status: order.status,
   totalAmount: order.total_amount,
   createdAt: order.created_at,
@@ -51,7 +55,7 @@ export const getOrderById = async (orderId, { userId } = {}) => {
   }
 
   const { rows: orders } = await pool.query(
-    `SELECT o.id, o.status, o.total_amount, o.created_at, o.updated_at, o.shipping_address, o.cancel_reason,
+    `SELECT o.id, o.order_number, o.status, o.total_amount, o.created_at, o.updated_at, o.shipping_address, o.cancel_reason,
             (SELECT json_build_object('status', r.status, 'amount', r.amount, 'requested_at', r.created_at)
              FROM refunds r JOIN payments p ON p.id = r.payment_id
              WHERE p.order_id = o.id
@@ -79,8 +83,14 @@ export const getOrderById = async (orderId, { userId } = {}) => {
   return toOrder(orders[0], items, { includeCustomer: userId === undefined });
 };
 
+// Finds an order by its number ("ORD-7K3M9Q"). Same ownership rule as getOrderById.
+export const getOrderByNumber = async (orderNumber, { userId } = {}) => {
+  const { rows } = await pool.query("SELECT id FROM orders WHERE order_number = $1", [orderNumber]);
+  return rows[0] && getOrderById(rows[0].id, { userId });
+};
+
 // A page of orders, newest first. Same rule: pass userId for one customer's orders only.
-export const listOrders = async ({ userId, status, page, limit }, { includeCustomer = false } = {}) => {
+export const listOrders = async ({ userId, status, orderNumber, page, limit }, { includeCustomer = false } = {}) => {
 
   const conditions = [];
   const values = [];
@@ -95,13 +105,16 @@ export const listOrders = async ({ userId, status, page, limit }, { includeCusto
   if (status !== undefined) {
     conditions.push(`o.status = ${addValue(status)}`);
   }
+  if (orderNumber !== undefined) {
+    conditions.push(`o.order_number = ${addValue(orderNumber)}`);
+  }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   const offset = (page - 1) * limit;
 
   const [rowsResult, countResult] = await Promise.all([
     pool.query(
-      `SELECT o.id, o.status, o.total_amount, o.created_at,
+      `SELECT o.id, o.order_number, o.status, o.total_amount, o.created_at,
               u.id AS user_id, u.name AS user_name, u.email AS user_email,
               (SELECT COALESCE(SUM(oi.quantity), 0)::int
                FROM order_items oi
@@ -121,6 +134,7 @@ export const listOrders = async ({ userId, status, page, limit }, { includeCusto
   return {
     orders: rowsResult.rows.map((row) => ({
       id: row.id,
+      orderNumber: row.order_number,
       status: row.status,
       totalAmount: row.total_amount,
       itemCount: row.item_count,
@@ -139,6 +153,35 @@ export const listOrders = async ({ userId, status, page, limit }, { includeCusto
 };
 
 // ---------- Placing an order ----------
+
+// Inserts the order with a new random order number. If the number happens to be taken
+// (about 1 in a million per order at 600 orders, rarer with fewer), try another.
+//
+// A failed statement normally ruins the whole transaction ("current transaction is aborted").
+// A SAVEPOINT is a bookmark inside it: ROLLBACK TO SAVEPOINT undoes just the failed insert,
+// and the rest of the checkout (locked cart, checked stock) carries on.
+const insertOrderWithNumber = async (client, [userId, totalAmount, shippingAddress]) => {
+  for (let attempt = 1; ; attempt++) {
+    await client.query("SAVEPOINT order_number");
+    try {
+      const { rows: [order] } = await client.query(
+        `INSERT INTO orders (user_id, total_amount, shipping_address, order_number)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, order_number`,
+        [userId, totalAmount, shippingAddress, orderNumbers.next()]
+      );
+      await client.query("RELEASE SAVEPOINT order_number");
+      return order;
+    } catch (err) {
+      await client.query("ROLLBACK TO SAVEPOINT order_number");
+      const numberTaken = err.code === PG_UNIQUE_VIOLATION && err.constraint === "orders_order_number_key";
+      if (!numberTaken || attempt >= 5) {
+        throw err;
+      }
+      logger.warn({ attempt }, "Order number already taken, trying another");
+    }
+  }
+};
 
 // Finds the address to ship to: the one the user picked, or else their default.
 // Always filtered by userId, so nobody can ship to (and read) someone else's address.
@@ -215,10 +258,7 @@ export const checkout = async (userId, { addressId } = {}) => {
     // 3. Create the order. The total is calculated here, from database prices.
     const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-    const { rows: [order] } = await client.query(
-      "INSERT INTO orders (user_id, total_amount, shipping_address) VALUES ($1, $2, $3) RETURNING id",
-      [userId, totalAmount, shippingAddress]
-    );
+    const order = await insertOrderWithNumber(client, [userId, totalAmount, shippingAddress]);
 
     for (const item of cart) {
       // 4. Copy each product's name and price into the order (the snapshot)

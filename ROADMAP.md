@@ -66,11 +66,11 @@ Ordered so each phase builds on the previous one. ⭐ = recommended next.
 - [x] 8.2 Expire unpaid orders: a background job cancels `pending` orders after 3 days (configurable) and releases their stock (`FOR UPDATE SKIP LOCKED`)
 - [x] 8.3 Idempotency keys (`Idempotency-Key` header) for checkout and add-to-cart: retries replay the first response instead of repeating the action
 - [x] 8.4 Automatic Razorpay refunds when a paid order is cancelled or money arrives late; retried by the job, tracked by webhooks
-- [ ] 8.5 Human-friendly order numbers (e.g. `ORD-7K3M9Q`): random, not counting, since UUIDs are hard to read out on a support call
+- [x] 8.5 Human-friendly order numbers (`ORD-7K3M9Q`): random, no look-alike characters, unique with a savepoint retry
 
 ## Phase 9 — Background work, Redis and email
 
-- [ ] 9.1 Redis + a job queue (BullMQ): run slow work outside the request, with retries
+- [x] 9.1 Job queue on PostgreSQL (pg-boss): retries with backoff, scheduled maintenance that runs once across all servers
 - [ ] 9.2 Emails: order confirmation, shipped, delivered (templates, sent by the queue)
 - [ ] 9.3 Forgot password and email verification with one-time, hashed, expiring tokens
 - [ ] 9.4 Caching hot reads (categories, product lists) with invalidation; Redis-backed rate limits for several servers

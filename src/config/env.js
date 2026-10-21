@@ -33,8 +33,7 @@ const envSchema = z.object({
   // Unpaid orders are cancelled (and their stock released) after this many minutes.
   // Default 4320 = 3 days. Their items stay reserved for the whole time.
   ORDER_PAYMENT_TIMEOUT_MINUTES: z.coerce.number().int().min(1).default(3 * 24 * 60),
-  // How often the server checks for such orders
-  ORDER_EXPIRY_CHECK_SECONDS: z.coerce.number().int().min(5).default(60),
+  // (The check runs once a minute as the "maintenance" job: see src/jobs/definitions.js)
 
   // Image uploads (optional): without these the app runs, but upload routes answer 503.
   // All three are on the Cloudinary dashboard: https://console.cloudinary.com

@@ -16,11 +16,14 @@ const connection = env.DATABASE_URL
       database: env.DB_NAME
     };
 
-const pool = new Pool({
+// Shared with the job queue (pg-boss), so it connects exactly the same way
+export const connectionConfig = {
   ...connection,
   // true = encrypted connection AND check the server's certificate
   ...(env.DB_SSL && { ssl: true })
-});
+};
+
+const pool = new Pool(connectionConfig);
 
 pool.on("error", (err) => {
   logger.error({ err }, "Unexpected PostgreSQL error");

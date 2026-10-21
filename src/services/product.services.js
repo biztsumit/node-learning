@@ -4,7 +4,8 @@ import { logger } from "../config/logger.js";
 import { withTransaction } from "../db/transaction.js";
 import { slugify } from "../utils/slugify.js";
 import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
-import { deleteImage, productImagePublicId, thumbnailUrl } from "./cloudinary.client.js";
+import { productImagePublicId, thumbnailUrl } from "./cloudinary.client.js";
+import { enqueue } from "../jobs/queue.js";
 
 // LEFT JOIN keeps products that have no category (their category columns come back as NULL)
 const SELECT_PRODUCTS = `
@@ -156,19 +157,19 @@ export const createProduct = async ({ name, description, price, stock, imageUrl,
   throw new Error(`Could not find a free slug for "${name}"`);
 };
 
-// The slug is NOT changed on update, so links to the product keep working after a rename
 // When a product's image changes or the product is deleted, remove the old file from
 // Cloudinary so unused images don't pile up (and cost storage). Only OUR uploads are
-// deleted, never outside links. Best effort: runs after the database change is saved,
-// and a failure is logged rather than undoing the admin's edit.
+// deleted, never outside links. It's a queued job: it runs after the database change is
+// saved, and if Cloudinary is down the queue retries it later instead of giving up.
 const removeOldImage = async (previousUrl, currentUrl) => {
   const publicId = productImagePublicId(previousUrl);
   if (!publicId || previousUrl === currentUrl) {
     return;
   }
   try {
-    await deleteImage(publicId);
+    await enqueue("delete-image", { publicId });
   } catch (err) {
+    // Only reached without a running queue (tests/scripts) or if the job couldn't be saved
     logger.warn({ err, publicId }, "Could not delete old product image from Cloudinary");
   }
 };
@@ -187,6 +188,7 @@ const updateAndGetPreviousImage = (id, sql, values) =>
     return { previousImageUrl: rows[0].image_url };
   });
 
+// The slug is NOT changed on update, so links to the product keep working after a rename
 export const updateProductById = async (id, { name, description, price, stock, imageUrl, categoryId }) => {
   const result = await updateAndGetPreviousImage(
     id,
