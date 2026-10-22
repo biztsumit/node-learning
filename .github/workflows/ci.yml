@@ -54,3 +54,57 @@ jobs:
 
       # "pretest" creates the ecommerce_test database and runs every migration on it first
       - run: npm test
+
+  # Builds the Docker image and runs the whole docker-compose setup the way a teammate would,
+  # then checks it really works. (Runs in parallel with the tests above.)
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Is docker-compose.yml valid?
+      - run: docker compose config --quiet
+
+      - name: Build and start (database, migrations, API)
+        run: docker compose up -d --build
+
+      - name: Wait until the API is healthy
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/health; then echo; exit 0; fi
+            sleep 2
+          done
+          echo "The API never became healthy"; exit 1
+
+      - name: Seed, register a user, read the catalog
+        run: |
+          docker compose run --rm migrate node src/db/seed.js
+          curl -fsS http://localhost:8080/products | grep -q '"T-Shirt"'
+          curl -fsS -X POST http://localhost:8080/auth/register \
+            -H "Content-Type: application/json" \
+            -d '{"name":"CI User","email":"ci@example.com","password":"secret123"}' > /dev/null
+
+      - name: Runs as a non-root user, and could write the verification email
+        run: |
+          test "$(docker compose exec -T api whoami)" = "node"
+          for i in $(seq 1 15); do
+            if [ -n "$(docker compose exec -T api ls /app/.emails)" ]; then exit 0; fi
+            sleep 1
+          done
+          echo "No email was saved"; exit 1
+
+      # Exit code 0 = it shut down by itself on SIGTERM; 137 would mean Docker had to kill it
+      - name: Stops gracefully
+        run: |
+          docker compose stop api
+          test "$(docker inspect --format '{{.State.ExitCode}}' "$(docker compose ps -aq api)")" = "0"
+          docker compose logs api | grep -q "Shutdown complete"
+
+      - name: Logs (if something failed)
+        if: failure()
+        run: docker compose logs
+
+      - run: docker compose down -v
+        if: always()

@@ -1,0 +1,78 @@
+# The whole system with one command: PostgreSQL + migrations + the API.
+#
+#   docker compose up --build        start everything (Ctrl+C to stop)
+#   docker compose up -d --build     ...in the background
+#   docker compose run --rm migrate node src/db/seed.js     add the sample products and coupons
+#   docker compose down              stop (the data stays in the "pgdata" volume)
+#   docker compose down -v           stop AND delete the data
+#   docker compose cp api:/app/.emails ./.emails          copy the "sent" emails out to open them
+#
+# Then: http://localhost:8080/health and http://localhost:8080/docs
+#
+# Ports 8080 and 5433 (not 3000 and 5432) so it can run next to your normal dev server and database.
+# No Redis: background jobs, caching signals and rate limits all work with PostgreSQL alone.
+
+# Settings shared by the API and the migration runner. Development values only: not secrets.
+x-app-environment: &app-environment
+  NODE_ENV: production
+  DB_HOST: db                 # the database service's name below works as a host name
+  DB_PORT: "5432"
+  DB_USER: shop
+  DB_PASSWORD: shop
+  DB_NAME: shop
+  JWT_SECRET: docker-compose-local-only-secret-change-me-0123456789
+  EMAIL_TRANSPORT: log        # never sends real email: saves each one in the "emails" volume
+  APP_URL: http://localhost:8080
+  TRUST_PROXY: "0"
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: shop
+      POSTGRES_DB: shop
+    volumes:
+      # A named volume: the data survives "docker compose down" and image rebuilds.
+      # PostgreSQL 18 images keep their data under /var/lib/postgresql (in a version folder).
+      - pgdata:/var/lib/postgresql
+    ports:
+      - "5433:5432"           # optional: connect from your PC (pgAdmin, psql) on port 5433
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shop -d shop"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Runs the migrations once, then exits. The API only starts after it SUCCEEDED, so it never
+  # serves requests against an old schema. (Same image as the API, different command.)
+  migrate:
+    build: .
+    image: ecommerce-api
+    command: ["node", "src/db/migrate.js"]
+    environment: *app-environment
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    image: ecommerce-api
+    environment: *app-environment
+    ports:
+      - "8080:3000"           # your PC's port 8080 → the container's port 3000
+    volumes:
+      # A named volume, not a folder of your PC (./.emails): on Linux, a host folder that Docker
+      # creates for a mount belongs to root, and the app (running as user "node") couldn't write
+      # to it. A new named volume copies the image's folder, owner included.
+      - emails:/app/.emails
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  emails:

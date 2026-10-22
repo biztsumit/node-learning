@@ -91,7 +91,7 @@ Ordered so each phase builds on the previous one. ⭐ = recommended next.
 
 ## Phase 12 — Engineering maturity
 
-- [ ] 12.1 Docker + docker-compose (app, PostgreSQL, Redis) for one-command setup
+- [ ] 12.1 Docker + docker-compose (app, PostgreSQL, migrations; no Redis needed) for one-command setup: files written, verified by the CI "docker" job
 - [ ] 12.2 TypeScript
 - [ ] 12.3 Observability: error tracking (Sentry), metrics (`/metrics` for Prometheus), tracing (OpenTelemetry)
 - [ ] 12.4 Refresh tokens in httpOnly cookies; two-factor login for admins

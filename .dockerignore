@@ -1,0 +1,21 @@
+# What the Docker build must NOT see. Everything not listed here is sent to the builder
+# ("the build context"), so this keeps builds fast and keeps secrets out of images.
+
+# Secrets: an image can be pushed and shared; a .env inside it would leak with it
+.env
+.env.*
+!.env.example
+
+# Installed inside the image instead (for Linux, from package-lock.json)
+node_modules
+
+# Not needed to run the API
+.git
+.github
+.emails
+tests
+*.md
+render.yaml
+docker-compose.yml
+Dockerfile
+.dockerignore
