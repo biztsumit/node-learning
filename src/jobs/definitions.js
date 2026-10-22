@@ -9,6 +9,7 @@ import { findUserById } from "../services/user.services.js";
 import { sendEmail } from "../emails/transport.js";
 import { expireUnpaidOrders, getOrderById } from "../services/order.services.js";
 import { retryPendingRefunds } from "../services/refund.services.js";
+import { refreshSalesReport } from "../services/report.services.js";
 
 export const JOBS = {
 
@@ -48,6 +49,16 @@ export const JOBS = {
         return;
       }
       await sendEmail(buildAuthEmail(type, user, token));
+    }
+  },
+
+  // Re-calculate the sales dashboard's daily numbers every 10 minutes.
+  // "exclusive": if one refresh is slow, the next waits instead of piling up.
+  "refresh-reports": {
+    queue: { policy: "exclusive", retryLimit: 0, expireInSeconds: 10 * 60 },
+    schedule: "*/10 * * * *",
+    run: async () => {
+      await refreshSalesReport();
     }
   },
 

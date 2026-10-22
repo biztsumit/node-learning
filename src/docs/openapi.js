@@ -11,6 +11,7 @@ import { createVariantSchema, updateVariantSchema } from "../validators/variant.
 import { createAddressSchema, updateAddressSchema } from "../validators/address.validators.js";
 import { checkoutSchema, orderListQuerySchema, adminOrderListQuerySchema, updateOrderStatusSchema, orderNumberParamSchema } from "../validators/order.validators.js";
 import { verifyPaymentSchema } from "../validators/payment.validators.js";
+import { summaryQuerySchema, revenueQuerySchema, topProductsQuerySchema, customersQuerySchema } from "../validators/report.validators.js";
 import { stockAdjustmentSchema, stockMovementListQuerySchema } from "../validators/stock.validators.js";
 import { cartQuerySchema, couponListQuerySchema, createCouponSchema, updateCouponSchema } from "../validators/coupon.validators.js";
 import { productImageSchema } from "../validators/upload.validators.js";
@@ -34,6 +35,11 @@ const jsonBody = (schema) => ({
 });
 
 // One OpenAPI "parameter" per field of a query-string schema
+// Report days are plain "YYYY-MM-DD" in Indian time
+const DAY = { type: "string", format: "date", example: "2026-10-22" };
+const DATA_AS_OF = { type: ["string", "null"], format: "date-time", description: "When the daily numbers were last recalculated (every 10 minutes)" };
+const REPORT_NOTES = "Sales = orders that are paid, shipped or delivered, counted on the day they were placed (Indian time). Leave out from/to for the last 30 days. Comes from a snapshot recalculated every 10 minutes (see dataAsOf; POST /admin/reports/refresh to update it now).";
+
 const queryParams = (schema) => {
   const { properties, required = [] } = fromZod(schema);
   return Object.entries(properties).map(([name, fieldSchema]) => ({
@@ -119,6 +125,7 @@ export const openApiDocument = {
     { name: "Addresses", description: "Saved shipping addresses" },
     { name: "Orders", description: "Checkout, order history and payments" },
     { name: "Admin", description: "Admin-only management" },
+    { name: "Reports", description: "Admin-only sales dashboard" },
     { name: "Webhooks", description: "Called by Razorpay's servers, not by apps" },
     { name: "System", description: "Status of the service" }
   ],
@@ -374,6 +381,45 @@ export const openApiDocument = {
         responses: { ...ok("Recorded", ref("StockMovement"), { status: 201 }), ...errors(400, 401, 403, 404, 409) }
       }
     },
+    "/admin/reports/summary": {
+      get: {
+        tags: ["Reports"], summary: "Revenue, orders, units, discounts and average order value vs the previous period", ...LOGGED_IN,
+        description: REPORT_NOTES,
+        parameters: queryParams(summaryQuerySchema),
+        responses: { ...ok("Summary", ref("SalesSummary")), ...errors(400, 401, 403) }
+      }
+    },
+    "/admin/reports/revenue": {
+      get: {
+        tags: ["Reports"], summary: "Revenue over time (every day/week/month, quiet ones as 0)", ...LOGGED_IN,
+        description: `${REPORT_NOTES} Each point has a running total, the change vs the previous point, and a moving average over the last 7 points. Weeks run Monday-Sunday. Daily series: at most 731 days.`,
+        parameters: queryParams(revenueQuerySchema),
+        responses: { ...ok("Series", ref("RevenueSeries")), ...errors(400, 401, 403) }
+      }
+    },
+    "/admin/reports/top-products": {
+      get: {
+        tags: ["Reports"], summary: "Best sellers, ranked by revenue or units", ...LOGGED_IN,
+        description: "Live numbers. Revenue here is before order-level coupon discounts. Equal values share a rank (1, 2, 2, 4).",
+        parameters: queryParams(topProductsQuerySchema),
+        responses: { ...ok("Top products", ref("TopProducts")), ...errors(400, 401, 403) }
+      }
+    },
+    "/admin/reports/customers": {
+      get: {
+        tags: ["Reports"], summary: "New vs returning customers, top customers", ...LOGGED_IN,
+        description: "Live numbers. A new customer's first order ever falls in the range; a returning one had ordered before it.",
+        parameters: queryParams(customersQuerySchema),
+        responses: { ...ok("Customer report", ref("CustomerReport")), ...errors(400, 401, 403) }
+      }
+    },
+    "/admin/reports/refresh": {
+      post: {
+        tags: ["Reports"], summary: "Recalculate the daily sales numbers now", ...LOGGED_IN,
+        description: "Normally done every 10 minutes by a background job.",
+        responses: { ...ok("Refreshed", { type: "object", properties: { refreshedAt: { type: "string", format: "date-time" } } }), ...errors(401, 403) }
+      }
+    },
     "/admin/reviews/{id}": {
       parameters: [pathId("id", "Review id")],
       delete: { tags: ["Admin"], summary: "Remove any review", ...LOGGED_IN, responses: { ...message("Deleted"), ...errors(401, 403, 404) } }
@@ -618,6 +664,77 @@ export const openApiDocument = {
           order: { type: ["object", "null"], properties: { id: UUID, orderNumber: { type: "string" } } },
           by: { type: ["object", "null"], properties: { id: UUID, name: { type: "string" } } },
           createdAt: { type: "string", format: "date-time" }
+        }
+      },
+      SalesSummary: {
+        type: "object",
+        properties: {
+          from: DAY, to: DAY,
+          previousPeriod: { type: "object", properties: { from: DAY, to: DAY } },
+          revenue: ref("Metric"), orders: ref("Metric"), unitsSold: ref("Metric"), discounts: ref("Metric"), averageOrderValue: ref("Metric"),
+          dataAsOf: DATA_AS_OF
+        }
+      },
+      Metric: {
+        type: "object",
+        properties: {
+          value: { type: "integer" }, previous: { type: "integer" },
+          changePercent: { type: ["number", "null"], description: "+25.5 = 25.5% more than the previous period; null if the previous was 0" }
+        }
+      },
+      RevenueSeries: {
+        type: "object",
+        properties: {
+          from: DAY, to: DAY, interval: { type: "string", enum: ["day", "week", "month"] },
+          points: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                period: { ...DAY, description: "The day, or the first day of the week/month" },
+                revenue: { type: "integer" }, orders: { type: "integer" }, unitsSold: { type: "integer" },
+                runningRevenue: { type: "integer", description: "Total from the first point up to this one" },
+                changePercent: { type: ["number", "null"] },
+                movingAverage: { type: "integer", description: "Average revenue of this point and the 6 before it" }
+              }
+            }
+          },
+          dataAsOf: DATA_AS_OF
+        }
+      },
+      TopProducts: {
+        type: "object",
+        properties: {
+          from: DAY, to: DAY, by: { type: "string", enum: ["revenue", "units"] },
+          products: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                rank: { type: "integer" }, productId: { type: ["string", "null"], format: "uuid" }, name: { type: "string" },
+                unitsSold: { type: "integer" }, revenue: { type: "integer" }, revenueSharePercent: { type: "number" }, orders: { type: "integer" }
+              }
+            }
+          }
+        }
+      },
+      CustomerReport: {
+        type: "object",
+        properties: {
+          from: DAY, to: DAY,
+          customers: { type: "integer" }, newCustomers: { type: "integer" }, returningCustomers: { type: "integer" },
+          returningPercent: { type: ["number", "null"] }, orders: { type: "integer" }, repeatOrders: { type: "integer" },
+          averageDaysBetweenOrders: { type: ["number", "null"] },
+          topCustomers: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                rank: { type: "integer" }, userId: UUID, name: { type: "string" }, email: { type: "string" },
+                orders: { type: "integer" }, spent: { type: "integer" }
+              }
+            }
+          }
         }
       },
       Coupon: {

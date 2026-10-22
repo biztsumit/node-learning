@@ -9,6 +9,7 @@ import docsRoutes from "./routes/docs.routes.js";
 import healthRoutes from "./routes/health.routes.js";
 import orderRoutes from "./routes/order.routes.js";
 import productRoutes from "./routes/product.routes.js";
+import reportRoutes from "./routes/report.routes.js";
 import stockRoutes from "./routes/stock.routes.js";
 import { adminReviewRoutes } from "./routes/review.routes.js";
 import toolsRoutes from "./routes/tools.routes.js";
@@ -71,6 +72,7 @@ app.use("/admin/orders", adminOrderRoutes);
 app.use("/admin/reviews", adminReviewRoutes);
 app.use("/admin/coupons", couponRoutes);
 app.use("/admin/stock-movements", stockRoutes);
+app.use("/admin/reports", reportRoutes);
 app.use("/admin/uploads", uploadRoutes);
 
 app.use(notFound);
