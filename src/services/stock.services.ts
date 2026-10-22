@@ -1,6 +1,6 @@
 // The stock ledger: why stock changed. The database records every change itself (a trigger
 // on product_variants); this file tells it the reason, and lets admins adjust and read it.
-import pool from "../config/db.js";
+import pool from "../config/db.ts";
 import { withTransaction } from "../db/transaction.ts";
 import { AppError } from "../utils/app-error.ts";
 import { setStockContext, type StockReason } from "../db/stock-context.ts";

@@ -2,8 +2,8 @@
 // and quick ways to create users, products, addresses and orders.
 import crypto from "node:crypto";
 import request from "supertest";
-import app from "../src/app.js";
-import pool from "../src/config/db.js";
+import app from "../src/app.ts";
+import pool from "../src/config/db.ts";
 import { slugify } from "../src/utils/slugify.ts";
 
 // Sends requests straight to the Express app, no real server or port needed:

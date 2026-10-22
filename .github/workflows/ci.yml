@@ -83,7 +83,7 @@ jobs:
 
       - name: Seed, register a user, read the catalog
         run: |
-          docker compose run --rm migrate node src/db/seed.js
+          docker compose run --rm migrate node src/db/seed.ts
           curl -fsS http://localhost:8080/products | grep -q '"T-Shirt"'
           curl -fsS -X POST http://localhost:8080/auth/register \
             -H "Content-Type: application/json" \

@@ -1,6 +1,6 @@
 import type { PoolClient, QueryResult, QueryResultRow } from "pg";
-import pool from "../config/db.js";
-import { logger } from "../config/logger.js";
+import pool from "../config/db.ts";
+import { logger } from "../config/logger.ts";
 import { getContext } from "../context/request-context.ts";
 
 // The client passed to withTransaction's work: a normal pg client, plus afterCommit

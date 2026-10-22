@@ -1,7 +1,8 @@
 // Usage: npm run seed
 // Adds sample data so a fresh database has something to work with.
-import pool from "../config/db.js";
+import pool from "../config/db.ts";
 import { slugify } from "../utils/slugify.ts";
+import { errorMessage } from "../utils/app-error.ts";
 
 const categories = ["Clothing", "Footwear"];
 
@@ -39,7 +40,7 @@ const seedCoupons = async () => {
        ON CONFLICT (code) DO NOTHING`,
       [c.code, c.description, c.type, c.value, c.maxDiscount, c.minOrder]
     );
-    added += rowCount;
+    added += rowCount ?? 0;
   }
   console.log(`Added ${added} demo coupons`);
 };
@@ -56,18 +57,20 @@ const seed = async () => {
   }
 
   // Remember each category's new id so products can point at it
-  const categoryIds = {};
+  const categoryIds: Record<string, string> = {};
 
   for (const name of categories) {
-    const { rows } = await pool.query(
+    const { rows: [category] } = await pool.query<{ id: string }>(
       "INSERT INTO categories (name) VALUES ($1) RETURNING id",
       [name]
     );
-    categoryIds[name] = rows[0].id;
+    if (category) {
+      categoryIds[name] = category.id;
+    }
   }
 
   for (const product of products) {
-    const { rows: [created] } = await pool.query(
+    const { rows: [created] } = await pool.query<{ id: string }>(
       `INSERT INTO products (slug, name, description, price, stock, category_id)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
@@ -80,6 +83,9 @@ const seed = async () => {
         categoryIds[product.category]
       ]
     );
+    if (!created) {
+      throw new Error(`Could not create ${product.name}`);
+    }
     // Every product needs at least one variant: price and stock really live there
     await pool.query(
       "INSERT INTO product_variants (product_id, price, stock) VALUES ($1, $2, $3)",
@@ -93,7 +99,7 @@ const seed = async () => {
 try {
   await seed();
 } catch (err) {
-  console.error("Seed failed:", err.message);
+  console.error("Seed failed:", errorMessage(err));
   process.exitCode = 1;
 } finally {
   await pool.end();

@@ -4,7 +4,7 @@ import {
   api, pool, resetDatabase, closeDatabase,
   createUser, createProduct, createAddress, stockOf
 } from "./helpers.js";
-import { buildOrderEmail } from "../src/emails/order-emails.js";
+import { buildOrderEmail } from "../src/emails/order-emails.ts";
 
 beforeEach(resetDatabase);
 after(closeDatabase);

@@ -2,7 +2,8 @@
 // Runs every .sql file in ./migrations that hasn't been run yet, in name order.
 import fs from "node:fs/promises";
 import path from "node:path";
-import pool from "../config/db.js";
+import pool from "../config/db.ts";
+import { errorMessage } from "../utils/app-error.ts";
 import { withTransaction } from "./transaction.ts";
 
 const migrationsDir = path.join(import.meta.dirname, "migrations");
@@ -40,7 +41,7 @@ const runMigrations = async () => {
       });
       console.log(`Applied ${file}`);
     } catch (err) {
-      throw new Error(`Migration ${file} failed: ${err.message}`);
+      throw new Error(`Migration ${file} failed: ${errorMessage(err)}`);
     }
   }
 };
@@ -48,7 +49,7 @@ const runMigrations = async () => {
 try {
   await runMigrations();
 } catch (err) {
-  console.error(err.message);
+  console.error(errorMessage(err));
   process.exitCode = 1;
 } finally {
   await pool.end();

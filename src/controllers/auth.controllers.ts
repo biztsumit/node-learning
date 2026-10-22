@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import * as accountService from "../services/account.services.ts";
 import * as userService from "../services/user.services.ts";
 import { env } from "../config/env.ts";
-import { logger } from "../config/logger.js";
+import { logger } from "../config/logger.ts";
 import { AppError } from "../utils/app-error.ts";
 import { PG_UNIQUE_VIOLATION, isDatabaseError } from "../utils/db-errors.ts";
 import { currentUser } from "../middlewares/auth.middleware.ts";

@@ -4,6 +4,10 @@ export type FieldError = {
   message: string;
 };
 
+// The message of anything that was thrown. In "catch (err)", err is unknown: JavaScript can
+// throw any value, not only Error objects.
+export const errorMessage = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
 // An error we throw on purpose, carrying the HTTP status to send back.
 // Example: throw new AppError(404, "Product not found");
 export class AppError extends Error {

@@ -8,14 +8,14 @@
   "license": "ISC",
   "type": "module",
   "scripts": {
-    "dev": "nodemon --ext js,ts,json src/server.js",
-    "start": "node src/server.js",
-    "make-admin": "node src/scripts/make-admin.js",
-    "migrate": "node src/db/migrate.js",
-    "seed": "node src/db/seed.js",
+    "dev": "nodemon --ext ts,json src/server.ts",
+    "start": "node src/server.ts",
+    "make-admin": "node src/scripts/make-admin.ts",
+    "migrate": "node src/db/migrate.ts",
+    "seed": "node src/db/seed.ts",
     "pretest": "node tests/setup-db.js",
     "test": "node --import ./tests/setup-env.js --test --test-concurrency=1 \"tests/*.test.js\"",
-    "expire-orders": "node src/scripts/expire-orders.js",
+    "expire-orders": "node src/scripts/expire-orders.ts",
     "typecheck": "tsc -p ."
   },
   "dependencies": {

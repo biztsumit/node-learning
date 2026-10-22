@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from "pg";
-import pool from "../config/db.js";
+import pool from "../config/db.ts";
 import { withTransaction } from "../db/transaction.ts";
 import { AppError } from "../utils/app-error.ts";
 import { postalCodeProblem, type CreateAddress, type UpdateAddress } from "../validators/address.validators.ts";

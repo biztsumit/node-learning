@@ -1,4 +1,4 @@
-import pool from "../config/db.js";
+import pool from "../config/db.ts";
 import { queryWithContext } from "../db/transaction.ts";
 import type { Category as CategoryInput } from "../validators/category.validators.ts";
 

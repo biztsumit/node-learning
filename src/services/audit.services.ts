@@ -1,5 +1,5 @@
 // Reading the audit log (it's written by database triggers, see migration 026)
-import pool from "../config/db.js";
+import pool from "../config/db.ts";
 import { pagedQuery, timestampKey, type Pagination, type Sort } from "../utils/cursor.ts";
 import type { AuditLogQuery } from "../validators/audit.validators.ts";
 

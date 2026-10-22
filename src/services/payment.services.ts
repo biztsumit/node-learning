@@ -1,10 +1,9 @@
-import type { PoolClient } from "pg";
 import { z } from "zod";
 import { env } from "../config/env.ts";
-import { logger } from "../config/logger.js";
-import { withTransaction } from "../db/transaction.ts";
+import { logger } from "../config/logger.ts";
+import { withTransaction, type TransactionClient } from "../db/transaction.ts";
 import { AppError } from "../utils/app-error.ts";
-import { enqueue } from "../jobs/queue.js";
+import { enqueue } from "../jobs/queue.ts";
 import * as razorpay from "./razorpay.client.ts";
 import { processRefund, recordRefundEvent, requestRefund } from "./refund.services.ts";
 import type { VerifyPayment } from "../validators/payment.validators.ts";
@@ -124,8 +123,9 @@ type PaymentOutcome =
 // Marks the payment, and its order, as paid. Safe to call many times for the same payment:
 // the browser and Razorpay's webhooks will usually BOTH report the same payment.
 // amount is only known from webhooks; the browser's report is proven by its signature instead.
+// TransactionClient (not just PoolClient): it queues an email, which needs the transaction's afterCommit
 const recordSuccessfulPayment = async (
-  client: PoolClient,
+  client: TransactionClient,
   { providerOrderId, providerPaymentId, amount }: { providerOrderId: string; providerPaymentId: string; amount?: number }
 ): Promise<PaymentOutcome> => {
 

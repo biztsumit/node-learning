@@ -1,10 +1,11 @@
+import type { Server } from "node:http";
 import { env } from "./config/env.ts";
-import { logger } from "./config/logger.js";
-import app from "./app.js";
-import pool, { connectDB } from "./config/db.js";
-import { startTunnel } from "./tunnel.js";
-import { startQueue, stopQueue } from "./jobs/queue.js";
-import { startCacheInvalidation, stopCacheInvalidation } from "./cache/invalidation.js";
+import { logger } from "./config/logger.ts";
+import app from "./app.ts";
+import pool, { connectDB } from "./config/db.ts";
+import { startTunnel } from "./tunnel.ts";
+import { startQueue, stopQueue } from "./jobs/queue.ts";
+import { startCacheInvalidation, stopCacheInvalidation } from "./cache/invalidation.ts";
 
 const PORT = env.PORT;
 
@@ -22,7 +23,7 @@ process.on("uncaughtException", (err) => {
 // Graceful shutdown. When the platform deploys a new version (or you press Ctrl+C), it asks
 // this process to stop. Stop accepting NEW requests, let the ones in progress finish, close
 // the database pool, then exit. Without this, a customer mid-checkout could get cut off.
-const shutdown = (server) => (signal) => {
+const shutdown = (server: Server) => (signal: NodeJS.Signals): void => {
   logger.info({ signal }, "Shutting down: no new requests, finishing the current requests and jobs");
 
   // If something hangs, don't wait forever: the platform would kill us anyway

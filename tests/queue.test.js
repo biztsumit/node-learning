@@ -2,8 +2,8 @@
 import crypto from "node:crypto";
 import { describe, it, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
-import { enqueue, startQueue, stopQueue } from "../src/jobs/queue.js";
-import { sentEmails } from "../src/emails/transport.js";
+import { enqueue, startQueue, stopQueue } from "../src/jobs/queue.ts";
+import { sentEmails } from "../src/emails/transport.ts";
 import { withTransaction } from "../src/db/transaction.ts";
 import {
   api, pool, resetDatabase, closeDatabase,

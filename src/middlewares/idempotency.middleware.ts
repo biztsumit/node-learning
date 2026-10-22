@@ -9,8 +9,8 @@
 // Without the header, the route works exactly as before.
 import crypto from "node:crypto";
 import type { NextFunction, Response } from "express";
-import pool from "../config/db.js";
-import { logger } from "../config/logger.js";
+import pool from "../config/db.ts";
+import { logger } from "../config/logger.ts";
 import { AppError } from "../utils/app-error.ts";
 import { currentUser } from "./auth.middleware.ts";
 import type { AnyRequest } from "../types/http.ts";

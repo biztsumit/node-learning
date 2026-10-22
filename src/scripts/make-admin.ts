@@ -1,5 +1,5 @@
 // Usage: npm run make-admin -- someone@example.com
-import pool from "../config/db.js";
+import pool from "../config/db.ts";
 import { updateUserRole } from "../services/user.services.ts";
 import { runWithContext } from "../context/request-context.ts";
 

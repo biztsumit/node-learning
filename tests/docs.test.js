@@ -2,8 +2,8 @@
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import SwaggerParser from "@apidevtools/swagger-parser";
-import app from "../src/app.js";
-import { openApiDocument } from "../src/docs/openapi.js";
+import app from "../src/app.ts";
+import { openApiDocument } from "../src/docs/openapi.ts";
 import { api, closeDatabase } from "./helpers.js";
 
 after(closeDatabase);
@@ -46,7 +46,7 @@ describe("API documentation", () => {
     }
   });
 
-  it("documents every route (add new routes to src/docs/openapi.js)", () => {
+  it("documents every route (add new routes to src/docs/openapi.ts)", () => {
     // The only undocumented route is the docs' own GET /docs/openapi.json
     assert.equal(countRoutes(app.router.stack) - 1, documentedOperations.length);
   });

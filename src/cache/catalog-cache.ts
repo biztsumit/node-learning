@@ -9,7 +9,9 @@ import { env } from "../config/env.ts";
 
 const MAX_ENTRIES = 500;   // different searches/pages each take one entry; oldest go first
 
-const entries = new Map();   // key → { value, expiresAt }   (a Map remembers insertion order)
+// key → { value, expiresAt }   (a Map remembers insertion order).
+// Values of different types share the map; each key always holds the same kind of value.
+const entries = new Map<string, { value: unknown; expiresAt: number }>();
 const stats = { hits: 0, misses: 0, clears: 0 };
 let ttlMs = env.CACHE_TTL_SECONDS * 1000;
 
@@ -20,13 +22,13 @@ export const catalogCache = {
   },
 
   // Tests switch caching on or off with this (CACHE_TTL_SECONDS=0 turns it off)
-  configure({ ttlSeconds }) {
+  configure({ ttlSeconds }: { ttlSeconds: number }): void {
     ttlMs = ttlSeconds * 1000;
     entries.clear();
   },
 
-  // Returns { value, hit }
-  async wrap(key, load) {
+  // Returns { value, hit }. <T>: the value has the type load() returns
+  async wrap<T>(key: string, load: () => Promise<T>): Promise<{ value: T; hit: boolean }> {
     if (!this.enabled) {
       return { value: await load(), hit: false };
     }
@@ -34,7 +36,7 @@ export const catalogCache = {
     const entry = entries.get(key);
     if (entry && entry.expiresAt > Date.now()) {
       stats.hits++;
-      return { value: entry.value, hit: true };
+      return { value: entry.value as T, hit: true };
     }
 
     stats.misses++;
@@ -46,7 +48,10 @@ export const catalogCache = {
       entries.delete(key);
       entries.set(key, { value, expiresAt: Date.now() + ttlMs });
       if (entries.size > MAX_ENTRIES) {
-        entries.delete(entries.keys().next().value);   // the oldest entry
+        const oldest = entries.keys().next().value;
+        if (oldest !== undefined) {
+          entries.delete(oldest);
+        }
       }
     }
     return { value, hit: false };
@@ -63,5 +68,5 @@ export const catalogCache = {
 };
 
 // Same query in a different order = same cache entry: { b: 1, a: 2 } and { a: 2, b: 1 }
-export const cacheKey = (prefix, params = {}) =>
-  `${prefix}:${JSON.stringify(Object.keys(params).sort().map((k) => [k, params[k]]))}`;
+export const cacheKey = (prefix: string, params: object = {}): string =>
+  `${prefix}:${JSON.stringify(Object.entries(params).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))}`;

@@ -1,5 +1,5 @@
 // A customer's saved-for-later products
-import pool from "../config/db.js";
+import pool from "../config/db.ts";
 import { AppError } from "../utils/app-error.ts";
 import { PG_FOREIGN_KEY_VIOLATION, isDatabaseError } from "../utils/db-errors.ts";
 import { thumbnailUrl } from "./cloudinary.client.ts";

@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { catalogCache } from "../cache/catalog-cache.js";
+import { catalogCache } from "../cache/catalog-cache.ts";
 
 // For routers that change the catalog (products, categories, reviews): after any successful
 // write, clear THIS server's cache before the response goes out. Then the admin who just

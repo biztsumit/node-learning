@@ -1,13 +1,13 @@
 import type { PoolClient } from "pg";
-import pool from "../config/db.js";
+import pool from "../config/db.ts";
 import { env } from "../config/env.ts";
-import { logger } from "../config/logger.js";
-import { withTransaction } from "../db/transaction.ts";
+import { logger } from "../config/logger.ts";
+import { withTransaction, type TransactionClient } from "../db/transaction.ts";
 import { AppError, type FieldError } from "../utils/app-error.ts";
 import { canChangeStatus, type OrderStatus } from "../utils/order-status.ts";
 import { orderNumbers } from "../utils/order-number.ts";
 import { PG_UNIQUE_VIOLATION, isDatabaseError } from "../utils/db-errors.ts";
-import { enqueue } from "../jobs/queue.js";
+import { enqueue } from "../jobs/queue.ts";
 import { getAddress, type Address } from "./address.services.ts";
 import { processRefund, requestRefund } from "./refund.services.ts";
 import { optionsLabel, type VariantOptions } from "./variant.services.ts";
@@ -63,7 +63,7 @@ export type OrderItem = {
   lineTotal: number;
 };
 
-type Customer = { id: string; name: string; email: string };
+export type Customer = { id: string; name: string; email: string };
 
 export type Order = {
   id: string;
@@ -496,11 +496,13 @@ const restoreStock = async (client: PoolClient, orderId: string): Promise<void> 
   }
 };
 
-// cancelReason: who/what cancelled it (only stored when the new status is "cancelled")
+// cancelReason: who/what cancelled it (only stored when the new status is "cancelled").
+// Exclude<OrderStatus, "pending">: every status an order can MOVE TO. Each one sends the
+// customer an email of the same name, and there's no "pending" email (orders start pending).
 const applyStatus = async (
-  client: PoolClient,
+  client: TransactionClient,
   orderId: string,
-  newStatus: OrderStatus,
+  newStatus: Exclude<OrderStatus, "pending">,
   { cancelReason = null }: { cancelReason?: CancelReason | null } = {}
 ): Promise<void> => {
   if (newStatus === "cancelled") {
@@ -548,7 +550,9 @@ export const changeOrderStatus = async (orderId: string, newStatus: OrderStatus)
     if (!order) {
       throw new AppError(404, "Order not found");
     }
-    if (!canChangeStatus(order.status, newStatus)) {
+    // No order ever moves back to "pending" (canChangeStatus says so too); checking it here
+    // also tells TypeScript that newStatus is one applyStatus accepts
+    if (newStatus === "pending" || !canChangeStatus(order.status, newStatus)) {
       throw new AppError(409, `Can't change an order from "${order.status}" to "${newStatus}"`);
     }
 

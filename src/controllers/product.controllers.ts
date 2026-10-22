@@ -1,6 +1,6 @@
 import type { Response } from "express";
 import * as productService from "../services/product.services.ts";
-import { cacheKey, catalogCache } from "../cache/catalog-cache.js";
+import { cacheKey, catalogCache } from "../cache/catalog-cache.ts";
 import { AppError } from "../utils/app-error.ts";
 import { PG_FOREIGN_KEY_VIOLATION, isDatabaseError } from "../utils/db-errors.ts";
 import { currentUser } from "../middlewares/auth.middleware.ts";

@@ -1,4 +1,4 @@
-import pool from "../config/db.js";
+import pool from "../config/db.ts";
 import { AppError } from "../utils/app-error.ts";
 import { optionsLabel, type VariantOptions } from "./variant.services.ts";
 

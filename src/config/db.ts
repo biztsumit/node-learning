@@ -1,7 +1,7 @@
 import pg from "pg";
 
 import { env } from "./env.ts";
-import { logger } from "./logger.js";
+import { logger } from "./logger.ts";
 
 const { Pool } = pg;
 

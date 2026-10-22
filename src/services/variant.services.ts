@@ -1,7 +1,7 @@
 // Product variants: the actual things you buy ("T-Shirt, size M, blue"), each with its own
 // price and stock. Every product has at least one; a simple product has one with no options.
 import type { Pool, PoolClient } from "pg";
-import pool from "../config/db.js";
+import pool from "../config/db.ts";
 import { withTransaction } from "../db/transaction.ts";
 import { AppError } from "../utils/app-error.ts";
 import { PG_UNIQUE_VIOLATION, isDatabaseError } from "../utils/db-errors.ts";

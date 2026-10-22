@@ -1,9 +1,9 @@
 // "Forgot password" and "verify your email": the flows that work through one-time links.
 import bcrypt from "bcryptjs";
-import pool from "../config/db.js";
-import { logger } from "../config/logger.js";
+import pool from "../config/db.ts";
+import { logger } from "../config/logger.ts";
 import { withTransaction } from "../db/transaction.ts";
-import { enqueue } from "../jobs/queue.js";
+import { enqueue } from "../jobs/queue.ts";
 import { AppError } from "../utils/app-error.ts";
 import { consumeToken, createToken, type TokenPurpose } from "./auth-token.services.ts";
 

@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
-import { sentEmails } from "../src/emails/transport.js";
+import { sentEmails } from "../src/emails/transport.ts";
 import { hashToken } from "../src/services/auth-token.services.ts";
 import { api, pool, resetDatabase, closeDatabase, warmUpPool, createUser } from "./helpers.js";
 

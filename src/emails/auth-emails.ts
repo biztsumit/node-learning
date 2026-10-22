@@ -1,16 +1,20 @@
 // Emails with one-time links: reset your password, verify your email address.
 import { env } from "../config/env.ts";
-import { TOKEN_LIFETIME_MINUTES } from "../services/auth-token.services.ts";
-import { escapeHtml } from "./order-emails.js";
+import { TOKEN_LIFETIME_MINUTES, type TokenPurpose } from "../services/auth-token.services.ts";
+import type { Email } from "./transport.ts";
+import { escapeHtml } from "./order-emails.ts";
 
 // The page that handles each link. APP_URL is your frontend; in development it defaults to
 // the small tool pages this API serves (/tools/reset-password, /tools/verify-email).
-const LINKS = {
+const LINKS: Record<TokenPurpose, (token: string) => string> = {
   password_reset: (token) => `${env.APP_URL}/reset-password?token=${encodeURIComponent(token)}`,
   email_verification: (token) => `${env.APP_URL}/verify-email?token=${encodeURIComponent(token)}`
 };
 
-const CONTENT = {
+type AuthEmailContent = { subject: string; heading: string; intro: string; button: string; outro: (minutes: number) => string };
+
+// Record<TokenPurpose, ...>: a new kind of link can't be added without its email
+const CONTENT: Record<TokenPurpose, AuthEmailContent> = {
   password_reset: {
     subject: "Reset your password",
     heading: "Reset your password",
@@ -27,10 +31,10 @@ const CONTENT = {
   }
 };
 
-export const AUTH_EMAIL_TYPES = Object.keys(CONTENT);
+export const AUTH_EMAIL_TYPES = Object.keys(CONTENT) as TokenPurpose[];
 
 // user: { name, email }. Builds { to, toName, subject, html, text }.
-export const buildAuthEmail = (type, user, token) => {
+export const buildAuthEmail = (type: TokenPurpose, user: { name: string; email: string }, token: string): Email => {
   const content = CONTENT[type];
   if (!content) {
     throw new Error(`Unknown auth email type "${type}"`);

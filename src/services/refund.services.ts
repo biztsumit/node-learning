@@ -7,11 +7,10 @@
 //   2. processRefund(id)           — AFTER that commit: calls Razorpay. If the call fails,
 //      the row simply stays pending and retryPendingRefunds() (the background job) tries again.
 // Never call an outside API while you still might roll back: Razorpay can't be rolled back.
-import type { PoolClient } from "pg";
-import pool from "../config/db.js";
-import { logger } from "../config/logger.js";
-import { withTransaction } from "../db/transaction.ts";
-import { enqueue } from "../jobs/queue.js";
+import pool from "../config/db.ts";
+import { logger } from "../config/logger.ts";
+import { withTransaction, type TransactionClient } from "../db/transaction.ts";
+import { enqueue } from "../jobs/queue.ts";
 import * as razorpay from "./razorpay.client.ts";
 
 // Give up retrying after this many calls; then a person has to look at it (it's logged)
@@ -26,7 +25,7 @@ type RefundStatus = "pending" | "processed" | "failed";
 export type RefundWebhookEntity = { id?: string; payment_id?: string } | undefined;
 
 // Step 1. Returns the new refund's id, or null if this payment already has an active refund.
-export const requestRefund = async (client: PoolClient, paymentId: string, reason: RefundReason): Promise<string | null> => {
+export const requestRefund = async (client: TransactionClient, paymentId: string, reason: RefundReason): Promise<string | null> => {
   const { rows } = await client.query<{ id: string }>(
     `INSERT INTO refunds (payment_id, amount, reason)
      SELECT id, amount, $2 FROM payments WHERE id = $1 AND status = 'paid'
@@ -42,7 +41,8 @@ export const requestRefund = async (client: PoolClient, paymentId: string, reaso
 };
 
 // Marks the payment refunded and, in the same transaction, queues the "refund processed" email
-const markPaymentRefunded = async (client: PoolClient, refundId: string): Promise<void> => {
+// Needs the transaction (not just a connection): it queues the "refunded" email
+const markPaymentRefunded = async (client: TransactionClient, refundId: string): Promise<void> => {
   const { rows: [payment] } = await client.query<{ order_id: string }>(
     `UPDATE payments SET status = 'refunded', updated_at = NOW()
      WHERE id = (SELECT payment_id FROM refunds WHERE id = $1) AND status <> 'refunded'
@@ -126,7 +126,7 @@ export const retryPendingRefunds = async ({ maxRefunds = 20 }: { maxRefunds?: nu
 
 // Webhooks: refund.processed / refund.failed (and refund.created) from Razorpay.
 // Runs inside the webhook's transaction.
-export const recordRefundEvent = async (client: PoolClient, eventType: string, entity: RefundWebhookEntity): Promise<void> => {
+export const recordRefundEvent = async (client: TransactionClient, eventType: string, entity: RefundWebhookEntity): Promise<void> => {
   if (!entity?.id) {
     return;
   }

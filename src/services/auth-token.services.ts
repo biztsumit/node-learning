@@ -1,7 +1,7 @@
 // One-time tokens for "reset your password" and "verify your email" links.
 import crypto from "node:crypto";
 import type { PoolClient } from "pg";
-import pool from "../config/db.js";
+import pool from "../config/db.ts";
 
 // Must match the CHECK on auth_tokens.purpose (migration 018)
 export type TokenPurpose = "password_reset" | "email_verification";

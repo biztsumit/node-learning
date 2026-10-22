@@ -1,4 +1,4 @@
-import pool from "../config/db.js";
+import pool from "../config/db.ts";
 import { queryWithContext, withTransaction } from "../db/transaction.ts";
 import { AppError } from "../utils/app-error.ts";
 import type { Role } from "../types/express.d.ts";

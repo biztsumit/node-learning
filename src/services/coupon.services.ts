@@ -1,6 +1,6 @@
 // Discount codes: the admin side (create, change, switch off) and the rules for using one.
 import type { Pool, PoolClient, QueryResult } from "pg";
-import pool from "../config/db.js";
+import pool from "../config/db.ts";
 import { queryWithContext, withTransaction } from "../db/transaction.ts";
 import { AppError } from "../utils/app-error.ts";
 import { PG_RESTRICT_VIOLATION, PG_UNIQUE_VIOLATION, isDatabaseError } from "../utils/db-errors.ts";

@@ -25,12 +25,12 @@ const UUID = { type: "string", format: "uuid", example: "01a14386-1238-7b41-9618
 // ---------- Turning zod schemas into OpenAPI pieces ----------
 
 // "input" = describe what the CLIENT sends (fields with defaults are optional)
-const fromZod = (schema) => {
+const fromZod = (schema: z.ZodType) => {
   const { $schema, ...jsonSchema } = z.toJSONSchema(schema, { io: "input", unrepresentable: "any" });
   return jsonSchema;
 };
 
-const jsonBody = (schema) => ({
+const jsonBody = (schema: z.ZodType) => ({
   required: true,
   content: { "application/json": { schema: fromZod(schema) } }
 });
@@ -41,8 +41,8 @@ const DAY = { type: "string", format: "date", example: "2026-10-22" };
 const DATA_AS_OF = { type: ["string", "null"], format: "date-time", description: "When the daily numbers were last recalculated (every 10 minutes)" };
 const REPORT_NOTES = "Sales = orders that are paid, shipped or delivered, counted on the day they were placed (Indian time). Leave out from/to for the last 30 days. Comes from a snapshot recalculated every 10 minutes (see dataAsOf; POST /admin/reports/refresh to update it now).";
 
-const queryParams = (schema) => {
-  const { properties, required = [] } = fromZod(schema);
+const queryParams = (schema: z.ZodType) => {
+  const { properties = {}, required = [] } = fromZod(schema);
   return Object.entries(properties).map(([name, fieldSchema]) => ({
     name,
     in: "query",
@@ -60,7 +60,7 @@ const IDEMPOTENCY_KEY = {
   schema: { type: "string", minLength: 8, maxLength: 255, pattern: "^[A-Za-z0-9_-]+$", example: "3f6b1c9e-8e2a-4c1d-9b7a-2d5e6f708192" }
 };
 
-const pathId = (name = "id", description) => ({
+const pathId = (name = "id", description?: string) => ({
   name,
   in: "path",
   required: true,
@@ -70,10 +70,10 @@ const pathId = (name = "id", description) => ({
 
 // ---------- Responses ----------
 
-const ref = (name) => ({ $ref: `#/components/schemas/${name}` });
+const ref = (name: string) => ({ $ref: `#/components/schemas/${name}` });
 
 // { success: true, data: ... }
-const ok = (description, data, { status = 200, pagination = false } = {}) => ({
+const ok = (description: string, data: object | undefined, { status = 200, pagination = false } = {}) => ({
   [status]: {
     description,
     content: {
@@ -91,13 +91,18 @@ const ok = (description, data, { status = 200, pagination = false } = {}) => ({
   }
 });
 
-const message = (description) => ok(description, undefined);
+const message = (description: string) => ok(description, undefined);
 
 // Error responses shared by many routes
-const errors = (...codes) => Object.fromEntries(codes.map((code) => [code, { $ref: `#/components/responses/${code}` }]));
+const errors = (...codes: number[]) => Object.fromEntries(codes.map((code) => [code, { $ref: `#/components/responses/${code}` }]));
 
 const PUBLIC = { security: [] };
 const LOGGED_IN = { security: [{ bearerAuth: [] }] };
+
+// The order number's rules (pattern etc.), from its zod schema. A JSON schema can also be
+// "true"/"false" in general, so keep it only if it's an object.
+const orderNumberField = fromZod(orderNumberParamSchema).properties?.orderNumber;
+const orderNumberSchema = typeof orderNumberField === "object" ? orderNumberField : {};
 
 // ---------- The document ----------
 
@@ -508,7 +513,7 @@ export const openApiDocument = {
       get: {
         tags: ["Orders"], summary: "One of my orders, by its order number", ...LOGGED_IN,
         description: "Accepts `ORD-7K3M9Q`, `ord-7k3m9q` or just `7K3M9Q`.",
-        parameters: [{ name: "orderNumber", in: "path", required: true, schema: { ...fromZod(orderNumberParamSchema).properties.orderNumber, example: "ORD-7K3M9Q" } }],
+        parameters: [{ name: "orderNumber", in: "path", required: true, schema: { ...orderNumberSchema, example: "ORD-7K3M9Q" } }],
         responses: { ...ok("Order", ref("Order")), ...errors(400, 401, 404) }
       }
     },

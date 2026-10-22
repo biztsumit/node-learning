@@ -1,12 +1,12 @@
 import { randomBytes } from "node:crypto";
 import type { PoolClient } from "pg";
-import pool from "../config/db.js";
-import { logger } from "../config/logger.js";
+import pool from "../config/db.ts";
+import { logger } from "../config/logger.ts";
 import { queryWithContext, withTransaction } from "../db/transaction.ts";
 import { slugify } from "../utils/slugify.ts";
 import { PG_UNIQUE_VIOLATION, isDatabaseError } from "../utils/db-errors.ts";
 import { productImagePublicId, thumbnailUrl } from "./cloudinary.client.ts";
-import { enqueue } from "../jobs/queue.js";
+import { enqueue } from "../jobs/queue.ts";
 import { AppError } from "../utils/app-error.ts";
 import { listVariants, type Variant } from "./variant.services.ts";
 import { setStockContext } from "../db/stock-context.ts";

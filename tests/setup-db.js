@@ -30,7 +30,7 @@ if (rowCount === 0) {
 await client.end();
 
 // Run the normal migration script, but pointed at the test database
-const result = spawnSync(process.execPath, ["src/db/migrate.js"], {
+const result = spawnSync(process.execPath, ["src/db/migrate.ts"], {
   env: { ...process.env, DB_NAME: testDb, LOG_LEVEL: "silent" },
   stdio: "inherit"
 });

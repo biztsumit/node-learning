@@ -40,5 +40,5 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3000/health || exit 1
 
 # "node", not "npm start": npm wouldn't pass Docker's stop signal (SIGTERM) on to the app,
-# so the graceful shutdown in server.js would never run and Docker would kill it after 10s.
-CMD ["node", "src/server.js"]
+# so the graceful shutdown in server.ts would never run and Docker would kill it after 10s.
+CMD ["node", "src/server.ts"]

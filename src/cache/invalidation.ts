@@ -5,17 +5,17 @@
 // LISTEN needs one connection that stays open (a pool hands connections in and out),
 // so this uses its own client, and reconnects if that connection drops.
 import pg from "pg";
-import { connectionConfig } from "../config/db.js";
-import { logger } from "../config/logger.js";
-import { catalogCache } from "./catalog-cache.js";
+import { connectionConfig } from "../config/db.ts";
+import { logger } from "../config/logger.ts";
+import { catalogCache } from "./catalog-cache.ts";
 
-let client = null;
+let client: pg.Client | null = null;
 let stopped = true;
-let retryTimer = null;
+let retryTimer: NodeJS.Timeout | undefined;
 
 // Without a working connection we can't hear about changes: clear the cache (anything could
 // have changed meanwhile) and try again in a few seconds, as many times as it takes
-const scheduleReconnect = (err) => {
+const scheduleReconnect = (err?: unknown): void => {
   if (stopped) return;
   catalogCache.clear();
   logger.warn({ err }, "Cache invalidation connection unavailable; retrying in 5 s");
@@ -24,7 +24,7 @@ const scheduleReconnect = (err) => {
   retryTimer.unref();
 };
 
-const connect = async () => {
+const connect = async (): Promise<void> => {
   const next = new pg.Client(connectionConfig);
 
   next.on("notification", (message) => {
@@ -35,7 +35,7 @@ const connect = async () => {
   });
 
   // "error" and "end" can both fire for one broken connection; react only once
-  const onBroken = (err) => {
+  const onBroken = (err?: Error): void => {
     if (client !== next) return;
     client = null;
     scheduleReconnect(err);
@@ -53,13 +53,13 @@ const connect = async () => {
   client = next;
 };
 
-export const startCacheInvalidation = async () => {
+export const startCacheInvalidation = async (): Promise<void> => {
   stopped = false;
   await connect();
   logger.info("Listening for catalog changes (cache invalidation)");
 };
 
-export const stopCacheInvalidation = async () => {
+export const stopCacheInvalidation = async (): Promise<void> => {
   stopped = true;
   clearTimeout(retryTimer);
   const closing = client;

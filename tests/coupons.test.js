@@ -5,7 +5,7 @@ import {
   createUser, createProduct, createAddress
 } from "./helpers.js";
 import { calculateDiscount } from "../src/services/coupon.services.ts";
-import { buildOrderEmail } from "../src/emails/order-emails.js";
+import { buildOrderEmail } from "../src/emails/order-emails.ts";
 
 beforeEach(resetDatabase);
 after(closeDatabase);

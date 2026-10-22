@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
 import { pinoHttp } from "pino-http";
-import { logger } from "../config/logger.js";
+import { logger } from "../config/logger.ts";
 
 // A client (or a proxy) may send its own request id; accept it only if it looks safe
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._-]{1,100}$/;

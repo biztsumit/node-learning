@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import * as categoryService from "../services/category.services.ts";
-import { catalogCache } from "../cache/catalog-cache.js";
+import { catalogCache } from "../cache/catalog-cache.ts";
 import { AppError } from "../utils/app-error.ts";
 import { PG_UNIQUE_VIOLATION, PG_RESTRICT_VIOLATION, isDatabaseError } from "../utils/db-errors.ts";
 import type { Checked } from "../types/http.ts";

@@ -1,8 +1,8 @@
 // The catalog cache, switched ON for this file (it's off for every other test file)
 import { describe, it, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
-import { catalogCache } from "../src/cache/catalog-cache.js";
-import { startCacheInvalidation, stopCacheInvalidation } from "../src/cache/invalidation.js";
+import { catalogCache } from "../src/cache/catalog-cache.ts";
+import { startCacheInvalidation, stopCacheInvalidation } from "../src/cache/invalidation.ts";
 import { api, pool, resetDatabase, closeDatabase, createUser, createProduct, setVariantFields } from "./helpers.js";
 
 before(async () => {

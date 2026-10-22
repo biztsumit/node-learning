@@ -9,7 +9,7 @@
 //   RANK() OVER (ORDER BY revenue DESC)    → 1st, 2nd, 2nd, 4th...
 //   ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at)
 //                                          → 1 for each customer's first order, 2 for the next...
-import pool from "../config/db.js";
+import pool from "../config/db.ts";
 import {
   REPORT_TIME_ZONE, addDays,
   type CustomersQuery, type RevenueQuery, type SummaryQuery, type TopProductsQuery
