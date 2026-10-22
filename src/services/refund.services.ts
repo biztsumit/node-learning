@@ -7,33 +7,43 @@
 //   2. processRefund(id)           — AFTER that commit: calls Razorpay. If the call fails,
 //      the row simply stays pending and retryPendingRefunds() (the background job) tries again.
 // Never call an outside API while you still might roll back: Razorpay can't be rolled back.
+import type { PoolClient } from "pg";
 import pool from "../config/db.js";
 import { logger } from "../config/logger.js";
 import { withTransaction } from "../db/transaction.ts";
 import { enqueue } from "../jobs/queue.js";
-import * as razorpay from "./razorpay.client.js";
+import * as razorpay from "./razorpay.client.ts";
 
 // Give up retrying after this many calls; then a person has to look at it (it's logged)
 const MAX_ATTEMPTS = 10;
 
+// Must match the CHECKs on the refunds table (migration 016)
+export type RefundReason = "order_cancelled" | "paid_after_cancellation";
+type RefundStatus = "pending" | "processed" | "failed";
+
+// A refund as Razorpay describes it in a webhook. It comes from outside, so every field may
+// be missing: the code checks before using them.
+export type RefundWebhookEntity = { id?: string; payment_id?: string } | undefined;
+
 // Step 1. Returns the new refund's id, or null if this payment already has an active refund.
-export const requestRefund = async (client, paymentId, reason) => {
-  const { rows } = await client.query(
+export const requestRefund = async (client: PoolClient, paymentId: string, reason: RefundReason): Promise<string | null> => {
+  const { rows } = await client.query<{ id: string }>(
     `INSERT INTO refunds (payment_id, amount, reason)
      SELECT id, amount, $2 FROM payments WHERE id = $1 AND status = 'paid'
      ON CONFLICT (payment_id) WHERE status <> 'failed' DO NOTHING
      RETURNING id`,
     [paymentId, reason]
   );
-  if (rows.length > 0) {
-    logger.info({ refundId: rows[0].id, paymentId, reason }, "Refund requested");
+  const refundId = rows[0]?.id ?? null;
+  if (refundId) {
+    logger.info({ refundId, paymentId, reason }, "Refund requested");
   }
-  return rows[0]?.id ?? null;
+  return refundId;
 };
 
 // Marks the payment refunded and, in the same transaction, queues the "refund processed" email
-const markPaymentRefunded = async (client, refundId) => {
-  const { rows: [payment] } = await client.query(
+const markPaymentRefunded = async (client: PoolClient, refundId: string): Promise<void> => {
+  const { rows: [payment] } = await client.query<{ order_id: string }>(
     `UPDATE payments SET status = 'refunded', updated_at = NOW()
      WHERE id = (SELECT payment_id FROM refunds WHERE id = $1) AND status <> 'refunded'
      RETURNING order_id`,
@@ -46,11 +56,14 @@ const markPaymentRefunded = async (client, refundId) => {
 };
 
 // Step 2. Safe to call any number of times, from anywhere, even at the same moment.
-export const processRefund = async (refundId) => {
+export const processRefund = async (refundId: string): Promise<void> => {
   await withTransaction(async (client) => {
 
     // SKIP LOCKED: if another process is already sending this refund, leave it to them
-    const { rows: [refund] } = await client.query(
+    const { rows: [refund] } = await client.query<{
+      id: string; amount: number; status: RefundStatus; provider_refund_id: string | null;
+      attempts: number; provider_payment_id: string;
+    }>(
       `SELECT r.id, r.amount, r.status, r.provider_refund_id, r.attempts, p.provider_payment_id
        FROM refunds r JOIN payments p ON p.id = r.payment_id
        WHERE r.id = $1
@@ -73,7 +86,7 @@ export const processRefund = async (refundId) => {
         notes: { refundId: refund.id }
       });
 
-      const status = accepted.status === "processed" ? "processed" : accepted.status === "failed" ? "failed" : "pending";
+      const status: RefundStatus = accepted.status === "processed" ? "processed" : accepted.status === "failed" ? "failed" : "pending";
       await client.query(
         `UPDATE refunds
          SET provider_refund_id = $2, status = $3, attempts = attempts + 1, last_error = NULL, updated_at = NOW()
@@ -88,7 +101,7 @@ export const processRefund = async (refundId) => {
       // Keep it pending; the job retries. (Recorded in this same transaction, which commits.)
       await client.query(
         "UPDATE refunds SET attempts = attempts + 1, last_error = $2, updated_at = NOW() WHERE id = $1",
-        [refund.id, err.message]
+        [refund.id, err instanceof Error ? err.message : String(err)]
       );
       const level = refund.attempts + 1 >= MAX_ATTEMPTS ? "error" : "warn";
       logger[level]({ err, refundId: refund.id, attempt: refund.attempts + 1 }, "Refund call to Razorpay failed; will retry");
@@ -97,8 +110,8 @@ export const processRefund = async (refundId) => {
 };
 
 // For the background job: send refunds that Razorpay hasn't accepted yet
-export const retryPendingRefunds = async ({ maxRefunds = 20 } = {}) => {
-  const { rows } = await pool.query(
+export const retryPendingRefunds = async ({ maxRefunds = 20 }: { maxRefunds?: number } = {}): Promise<number> => {
+  const { rows } = await pool.query<{ id: string }>(
     `SELECT id FROM refunds
      WHERE status = 'pending' AND provider_refund_id IS NULL AND attempts < $1
      ORDER BY created_at
@@ -113,14 +126,14 @@ export const retryPendingRefunds = async ({ maxRefunds = 20 } = {}) => {
 
 // Webhooks: refund.processed / refund.failed (and refund.created) from Razorpay.
 // Runs inside the webhook's transaction.
-export const recordRefundEvent = async (client, eventType, entity) => {
+export const recordRefundEvent = async (client: PoolClient, eventType: string, entity: RefundWebhookEntity): Promise<void> => {
   if (!entity?.id) {
     return;
   }
 
   // Normally we stored Razorpay's id when it accepted the refund. If that answer was lost,
   // match the event to our still-unsent refund for the same payment instead.
-  const { rows: [refund] } = await client.query(
+  const { rows: [refund] } = await client.query<{ id: string }>(
     `SELECT r.id FROM refunds r
      WHERE r.provider_refund_id = $1
         OR (r.provider_refund_id IS NULL AND r.status = 'pending'
@@ -136,7 +149,7 @@ export const recordRefundEvent = async (client, eventType, entity) => {
 
   // Webhooks can arrive out of order (e.g. "created" after "processed"), so a status only
   // ever moves forward: pending → processed / failed. "refund.created" just records the id.
-  const status = eventType === "refund.processed" ? "processed" : eventType === "refund.failed" ? "failed" : null;
+  const status: RefundStatus | null = eventType === "refund.processed" ? "processed" : eventType === "refund.failed" ? "failed" : null;
   await client.query(
     `UPDATE refunds
      SET provider_refund_id = $2,

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { productImagePublicId } from "../services/cloudinary.client.js";
+import { productImagePublicId } from "../services/cloudinary.client.ts";
 
 // PATCH /products/:id/image — an image uploaded with POST /admin/uploads/product-image, or null to remove it
 export const productImageSchema = z.object({

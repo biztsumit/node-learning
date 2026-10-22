@@ -1,6 +1,6 @@
 // Emails with one-time links: reset your password, verify your email address.
 import { env } from "../config/env.ts";
-import { TOKEN_LIFETIME_MINUTES } from "../services/auth-token.services.js";
+import { TOKEN_LIFETIME_MINUTES } from "../services/auth-token.services.ts";
 import { escapeHtml } from "./order-emails.js";
 
 // The page that handles each link. APP_URL is your frontend; in development it defaults to

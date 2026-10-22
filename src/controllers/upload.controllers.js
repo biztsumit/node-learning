@@ -1,4 +1,4 @@
-import { createProductImageUpload } from "../services/cloudinary.client.js";
+import { createProductImageUpload } from "../services/cloudinary.client.ts";
 import * as productService from "../services/product.services.js";
 import { AppError } from "../utils/app-error.ts";
 

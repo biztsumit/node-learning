@@ -1,12 +1,44 @@
 import pool from "../config/db.js";
 import { AppError } from "../utils/app-error.ts";
-import { optionsLabel } from "./variant.services.js";
+import { optionsLabel, type VariantOptions } from "./variant.services.ts";
 
 // Every query here filters by user_id, so a user can only ever touch their own cart.
 // A cart line is one VARIANT (e.g. "T-Shirt, size M"), so one product can appear twice.
 
-export const getCart = async (userId) => {
-  const { rows } = await pool.query(
+type CartRow = {
+  product_id: string;
+  variant_id: string;
+  quantity: number;
+  slug: string;
+  name: string;
+  image_url: string | null;
+  options: VariantOptions;
+  price: number;
+  stock: number;
+};
+
+export type CartItem = {
+  productId: string;
+  variantId: string;
+  slug: string;
+  name: string;
+  options: VariantOptions;
+  optionsLabel: string;
+  price: number;
+  imageUrl: string | null;
+  stock: number;
+  quantity: number;
+  lineTotal: number;
+};
+
+export type Cart = {
+  items: CartItem[];
+  totalQuantity: number;
+  subtotal: number;
+};
+
+export const getCart = async (userId: string): Promise<Cart> => {
+  const { rows } = await pool.query<CartRow>(
     `SELECT
        ci.product_id,
        ci.variant_id,
@@ -26,7 +58,7 @@ export const getCart = async (userId) => {
   );
 
   // Prices are read from the variant right now, so the cart always shows today's price
-  const items = rows.map((row) => ({
+  const items = rows.map((row): CartItem => ({
     productId: row.product_id,
     variantId: row.variant_id,
     slug: row.slug,
@@ -47,10 +79,20 @@ export const getCart = async (userId) => {
   };
 };
 
+// The variant a customer is adding, with what the controller needs to check availability
+export type ChosenVariant = {
+  id: string;
+  product_id: string;
+  options: VariantOptions;
+  price: number;
+  stock: number;
+  name: string;
+};
+
 // Which variant does the customer want? With variantId: that one (it must belong to the
 // product). Without: fine for a product that has only one variant; otherwise they must choose.
-export const resolveVariant = async (productId, variantId) => {
-  const { rows } = await pool.query(
+export const resolveVariant = async (productId: string, variantId: string | undefined): Promise<ChosenVariant> => {
+  const { rows } = await pool.query<ChosenVariant>(
     `SELECT v.id, v.product_id, v.options, v.price, v.stock, p.name
      FROM product_variants v
      JOIN products p ON p.id = v.product_id
@@ -59,7 +101,8 @@ export const resolveVariant = async (productId, variantId) => {
     [productId]
   );
 
-  if (rows.length === 0) {
+  const [only] = rows;
+  if (!only) {
     throw new AppError(404, "Product not found");
   }
   if (variantId !== undefined) {
@@ -75,13 +118,21 @@ export const resolveVariant = async (productId, variantId) => {
       message: `This product comes in ${rows.length} options (${rows.map((v) => optionsLabel(v.options)).join(" / ")}): send the variantId of the one you want`
     }]);
   }
-  return rows[0];
+  return only;
+};
+
+export type CartLine = {
+  variant_id: string;
+  quantity: number;
+  stock: number;
+  options: VariantOptions;
+  name: string;
 };
 
 // The cart line a URL points at. Accepts a variant id, or a product id when the customer has
 // only one variant of that product in their cart (so older apps that send product ids still work).
-export const findCartLine = async (userId, id) => {
-  const { rows } = await pool.query(
+export const findCartLine = async (userId: string, id: string): Promise<CartLine | undefined> => {
+  const { rows } = await pool.query<CartLine>(
     `SELECT ci.variant_id, ci.quantity, v.stock, v.options, p.name
      FROM cart_items ci
      JOIN product_variants v ON v.id = ci.variant_id
@@ -96,8 +147,8 @@ export const findCartLine = async (userId, id) => {
 };
 
 // How many of this variant are already in the user's cart (0 if none)
-export const getCartItemQuantity = async (userId, variantId) => {
-  const { rows } = await pool.query(
+export const getCartItemQuantity = async (userId: string, variantId: string): Promise<number> => {
+  const { rows } = await pool.query<{ quantity: number }>(
     "SELECT quantity FROM cart_items WHERE user_id = $1 AND variant_id = $2",
     [userId, variantId]
   );
@@ -106,7 +157,7 @@ export const getCartItemQuantity = async (userId, variantId) => {
 
 // "Upsert": insert a new row, or if this variant is already in the cart, add to its quantity.
 // One statement, so two quick clicks on "Add to cart" can't lose an update.
-export const addCartItem = async (userId, productId, variantId, quantity) => {
+export const addCartItem = async (userId: string, productId: string, variantId: string, quantity: number): Promise<void> => {
   await pool.query(
     `INSERT INTO cart_items (user_id, product_id, variant_id, quantity)
      VALUES ($1, $2, $3, $4)
@@ -118,7 +169,7 @@ export const addCartItem = async (userId, productId, variantId, quantity) => {
   );
 };
 
-export const setCartItemQuantity = async (userId, variantId, quantity) => {
+export const setCartItemQuantity = async (userId: string, variantId: string, quantity: number): Promise<void> => {
   await pool.query(
     `UPDATE cart_items
      SET quantity = $3, updated_at = NOW()
@@ -127,13 +178,13 @@ export const setCartItemQuantity = async (userId, variantId, quantity) => {
   );
 };
 
-export const removeCartItem = async (userId, variantId) => {
+export const removeCartItem = async (userId: string, variantId: string): Promise<void> => {
   await pool.query(
     "DELETE FROM cart_items WHERE user_id = $1 AND variant_id = $2",
     [userId, variantId]
   );
 };
 
-export const clearCart = async (userId) => {
+export const clearCart = async (userId: string): Promise<void> => {
   await pool.query("DELETE FROM cart_items WHERE user_id = $1", [userId]);
 };

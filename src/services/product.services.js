@@ -4,10 +4,10 @@ import { logger } from "../config/logger.js";
 import { queryWithContext, withTransaction } from "../db/transaction.ts";
 import { slugify } from "../utils/slugify.ts";
 import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.ts";
-import { productImagePublicId, thumbnailUrl } from "./cloudinary.client.js";
+import { productImagePublicId, thumbnailUrl } from "./cloudinary.client.ts";
 import { enqueue } from "../jobs/queue.js";
 import { AppError } from "../utils/app-error.ts";
-import { listVariants } from "./variant.services.js";
+import { listVariants } from "./variant.services.ts";
 import { setStockContext } from "../db/stock-context.ts";
 import { afterCursor, cursorPage, timestampKey } from "../utils/cursor.ts";
 

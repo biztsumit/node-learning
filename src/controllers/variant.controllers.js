@@ -1,4 +1,4 @@
-import * as variantService from "../services/variant.services.js";
+import * as variantService from "../services/variant.services.ts";
 import { AppError } from "../utils/app-error.ts";
 
 // GET /products/:id/variants (public)

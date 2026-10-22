@@ -1,6 +1,6 @@
 import { describe, it, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
-import { retryPendingRefunds } from "../src/services/refund.services.js";
+import { retryPendingRefunds } from "../src/services/refund.services.ts";
 import {
   api, pool, resetDatabase, closeDatabase, warmUpPool, hmac,
   createUser, createProduct, createAddress, placeOrder

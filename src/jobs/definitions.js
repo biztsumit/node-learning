@@ -1,14 +1,14 @@
 // Every kind of background job, with its retry rules. The queue (queue.js) runs them.
 import { logger } from "../config/logger.js";
 import { deleteOldIdempotencyKeys } from "../middlewares/idempotency.middleware.js";
-import { deleteImage } from "../services/cloudinary.client.js";
+import { deleteImage } from "../services/cloudinary.client.ts";
 import { buildAuthEmail } from "../emails/auth-emails.js";
 import { buildOrderEmail } from "../emails/order-emails.js";
-import { deleteDeadTokens } from "../services/auth-token.services.js";
+import { deleteDeadTokens } from "../services/auth-token.services.ts";
 import { findUserById } from "../services/user.services.ts";
 import { sendEmail } from "../emails/transport.js";
 import { expireUnpaidOrders, getOrderById } from "../services/order.services.js";
-import { retryPendingRefunds } from "../services/refund.services.js";
+import { retryPendingRefunds } from "../services/refund.services.ts";
 import { refreshSalesReport } from "../services/report.services.js";
 
 export const JOBS = {

@@ -4,7 +4,7 @@ import pool from "../config/db.js";
 import { withTransaction } from "../db/transaction.ts";
 import { AppError } from "../utils/app-error.ts";
 import { setStockContext, type StockReason } from "../db/stock-context.ts";
-import { optionsLabel } from "./variant.services.js";
+import { optionsLabel } from "./variant.services.ts";
 import { pagedQuery, timestampKey, type Pagination, type Sort } from "../utils/cursor.ts";
 import type { StockAdjustment, StockMovementListQuery } from "../validators/stock.validators.ts";
 

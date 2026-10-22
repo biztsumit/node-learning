@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import * as accountService from "../services/account.services.js";
+import * as accountService from "../services/account.services.ts";
 import * as userService from "../services/user.services.ts";
 import { env } from "../config/env.ts";
 import { logger } from "../config/logger.js";

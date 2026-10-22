@@ -1,18 +1,35 @@
 // Product variants: the actual things you buy ("T-Shirt, size M, blue"), each with its own
 // price and stock. Every product has at least one; a simple product has one with no options.
+import type { Pool, PoolClient } from "pg";
 import pool from "../config/db.js";
 import { withTransaction } from "../db/transaction.ts";
 import { AppError } from "../utils/app-error.ts";
-import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.ts";
+import { PG_UNIQUE_VIOLATION, isDatabaseError } from "../utils/db-errors.ts";
 import { setStockContext } from "../db/stock-context.ts";
+import type { CreateVariant, UpdateVariant } from "../validators/variant.validators.ts";
+
+// {"size": "M", "colour": "Blue"}: option name → chosen value
+export type VariantOptions = Record<string, string>;
+
+type VariantRow = {
+  id: string;
+  options: VariantOptions;
+  sku: string | null;
+  price: number;
+  stock: number;
+};
+
+export type Variant = VariantRow & {
+  label: string;
+};
 
 // {"size": "M", "colour": "Blue"} → "Size: M, Colour: Blue"   ({} → "")
-export const optionsLabel = (options = {}) =>
+export const optionsLabel = (options: VariantOptions = {}): string =>
   Object.entries(options)
-    .map(([name, value]) => `${name[0].toUpperCase()}${name.slice(1)}: ${value}`)
+    .map(([name, value]) => `${name.charAt(0).toUpperCase()}${name.slice(1)}: ${value}`)
     .join(", ");
 
-const toVariant = (row) => ({
+const toVariant = (row: VariantRow): Variant => ({
   id: row.id,
   options: row.options,
   label: optionsLabel(row.options),
@@ -23,19 +40,21 @@ const toVariant = (row) => ({
 
 const VARIANT_COLUMNS = "id, options, sku, price, stock";
 
-export const listVariants = async (productId, db = pool) => {
-  const { rows } = await db.query(
+// db: the pool, or a transaction's client when called inside one
+export const listVariants = async (productId: string, db: Pool | PoolClient = pool): Promise<Variant[]> => {
+  const { rows } = await db.query<VariantRow>(
     `SELECT ${VARIANT_COLUMNS} FROM product_variants WHERE product_id = $1 ORDER BY price, created_at, id`,
     [productId]
   );
   return rows.map(toVariant);
 };
 
-const sameKeys = (a, b) => JSON.stringify(Object.keys(a).sort()) === JSON.stringify(Object.keys(b).sort());
+const sameKeys = (a: VariantOptions, b: VariantOptions): boolean =>
+  JSON.stringify(Object.keys(a).sort()) === JSON.stringify(Object.keys(b).sort());
 
 // Every variant change for a product locks the product row first, so two admins editing
 // variants of the same product at once take turns (and the rules below can't be raced past)
-const lockProduct = async (client, productId) => {
+const lockProduct = async (client: PoolClient, productId: string): Promise<void> => {
   const { rows } = await client.query("SELECT id FROM products WHERE id = $1 FOR UPDATE", [productId]);
   if (rows.length === 0) {
     throw new AppError(404, "Product not found");
@@ -44,7 +63,7 @@ const lockProduct = async (client, productId) => {
 
 // All variants of a product must use the same option names: if some are "size + colour",
 // a variant with only "size" would make no sense to choose in a shop.
-const checkOptionNames = (others, options) => {
+const checkOptionNames = (others: Variant[], options: VariantOptions): void => {
   const mismatch = others.find((v) => !sameKeys(v.options, options));
   if (mismatch) {
     const expected = Object.keys(mismatch.options);
@@ -54,37 +73,47 @@ const checkOptionNames = (others, options) => {
   }
 };
 
-const handleDbError = (err) => {
-  if (err.code === PG_UNIQUE_VIOLATION && err.constraint === "product_variants_product_options_key") {
+// ": never" = this function never returns normally: it always throws
+const handleDbError = (err: unknown): never => {
+  if (isDatabaseError(err) && err.code === PG_UNIQUE_VIOLATION && err.constraint === "product_variants_product_options_key") {
     throw new AppError(409, "This product already has a variant with exactly these options");
   }
-  if (err.code === PG_UNIQUE_VIOLATION && err.constraint === "product_variants_sku_key") {
+  if (isDatabaseError(err) && err.code === PG_UNIQUE_VIOLATION && err.constraint === "product_variants_sku_key") {
     throw new AppError(409, "Another variant already uses this SKU");
   }
   throw err;
 };
 
+// An UPDATE/INSERT ... RETURNING on a row we've just locked always returns it
+const returnedVariant = (rows: VariantRow[]): Variant => {
+  const [row] = rows;
+  if (!row) {
+    throw new AppError(404, "Variant not found");
+  }
+  return toVariant(row);
+};
+
 // adminId: who did it, for the stock ledger
-export const createVariant = (productId, { options, sku, price, stock }, adminId) =>
+export const createVariant = (productId: string, { options, sku, price, stock }: CreateVariant, adminId: string): Promise<Variant> =>
   withTransaction(async (client) => {
     await lockProduct(client, productId);
     await setStockContext(client, { reason: "initial", userId: adminId });
     checkOptionNames(await listVariants(productId, client), options);
 
     const { rows } = await client
-      .query(
+      .query<VariantRow>(
         `INSERT INTO product_variants (product_id, options, sku, price, stock)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING ${VARIANT_COLUMNS}`,
         [productId, options, sku ?? null, price, stock]
       )
       .catch(handleDbError);
-    return toVariant(rows[0]);
+    return returnedVariant(rows);
   });
 
 // Partial update: send only what changes
 // Setting stock here is a "correction" in the ledger (for deliveries, use a stock movement)
-export const updateVariant = (productId, variantId, fields, adminId) =>
+export const updateVariant = (productId: string, variantId: string, fields: UpdateVariant, adminId: string): Promise<Variant> =>
   withTransaction(async (client) => {
     await lockProduct(client, productId);
     await setStockContext(client, { reason: "correction", userId: adminId });
@@ -98,7 +127,7 @@ export const updateVariant = (productId, variantId, fields, adminId) =>
     }
 
     const { rows } = await client
-      .query(
+      .query<VariantRow>(
         `UPDATE product_variants
          SET options = COALESCE($3, options),
              sku = CASE WHEN $4::boolean THEN $5 ELSE sku END,
@@ -109,10 +138,10 @@ export const updateVariant = (productId, variantId, fields, adminId) =>
         [variantId, productId, fields.options ?? null, fields.sku !== undefined, fields.sku ?? null, fields.price ?? null, fields.stock ?? null]
       )
       .catch(handleDbError);
-    return toVariant(rows[0]);
+    return returnedVariant(rows);
   });
 
-export const deleteVariant = (productId, variantId) =>
+export const deleteVariant = (productId: string, variantId: string): Promise<void> =>
   withTransaction(async (client) => {
     await lockProduct(client, productId);
     const variants = await listVariants(productId, client);

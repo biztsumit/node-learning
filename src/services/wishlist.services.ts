@@ -2,7 +2,7 @@
 import pool from "../config/db.js";
 import { AppError } from "../utils/app-error.ts";
 import { PG_FOREIGN_KEY_VIOLATION, isDatabaseError } from "../utils/db-errors.ts";
-import { thumbnailUrl } from "./cloudinary.client.js";
+import { thumbnailUrl } from "./cloudinary.client.ts";
 
 // Plenty for a real person; stops one account from filling the table
 export const MAX_WISHLIST_ITEMS = 200;
