@@ -1,6 +1,6 @@
 // Discount codes: the admin side (create, change, switch off) and the rules for using one.
 import pool from "../config/db.js";
-import { withTransaction } from "../db/transaction.js";
+import { queryWithContext, withTransaction } from "../db/transaction.js";
 import { AppError } from "../utils/app-error.js";
 import { PG_RESTRICT_VIOLATION, PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
 
@@ -193,7 +193,7 @@ const FIELDS = [
 export const createCoupon = async (data) => {
   checkRules({ ...data, timesUsed: 0 });
   return save(
-    pool,
+    { query: queryWithContext },
     `INSERT INTO coupons (${FIELDS.map(([, column]) => column).join(", ")})
      VALUES (${FIELDS.map((_, i) => `$${i + 1}`).join(", ")})
      RETURNING ${COLUMNS}`,
@@ -226,7 +226,7 @@ export const updateCoupon = (id, changes) =>
 // (ON DELETE RESTRICT) makes the database refuse, at the exact moment of the delete.
 export const deleteCoupon = async (id) => {
   try {
-    const { rowCount } = await pool.query("DELETE FROM coupons WHERE id = $1", [id]);
+    const { rowCount } = await queryWithContext("DELETE FROM coupons WHERE id = $1", [id]);
     if (rowCount === 0) {
       throw new AppError(404, "Coupon not found");
     }

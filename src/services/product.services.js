@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import pool from "../config/db.js";
 import { logger } from "../config/logger.js";
-import { withTransaction } from "../db/transaction.js";
+import { queryWithContext, withTransaction } from "../db/transaction.js";
 import { slugify } from "../utils/slugify.js";
 import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
 import { productImagePublicId, thumbnailUrl } from "./cloudinary.client.js";
@@ -339,7 +339,7 @@ export const setProductImage = async (id, imageUrl) => {
 };
 
 export const deleteProductById = async (id) => {
-  const { rows } = await pool.query(
+  const { rows } = await queryWithContext(
     "DELETE FROM products WHERE id = $1 RETURNING image_url",
     [id]
   );

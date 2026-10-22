@@ -1,4 +1,6 @@
 import pool from "../config/db.js";
+import { queryWithContext, withTransaction } from "../db/transaction.js";
+import { AppError } from "../utils/app-error.js";
 
 export const findUserByEmail = async (email) => {
   const { rows } = await pool.query(
@@ -41,7 +43,7 @@ export const createUser = async ({ name, email, passwordHash }) => {
 };
 
 export const updateUserName = async (id, name) => {
-  const { rows } = await pool.query(
+  const { rows } = await queryWithContext(
     `UPDATE users SET name = $1, updated_at = NOW()
      WHERE id = $2
      RETURNING id, name, email, role, created_at`,
@@ -52,7 +54,7 @@ export const updateUserName = async (id, name) => {
 
 // Saves the new password AND raises token_version, so every token issued before now stops working
 export const updatePassword = async (id, passwordHash) => {
-  const { rows } = await pool.query(
+  const { rows } = await queryWithContext(
     `UPDATE users
      SET password_hash = $1, token_version = token_version + 1, updated_at = NOW()
      WHERE id = $2
@@ -74,7 +76,7 @@ export const bumpTokenVersion = async (id) => {
 };
 
 export const updateUserRole = async (email, role) => {
-  const { rows } = await pool.query(
+  const { rows } = await queryWithContext(
     "UPDATE users SET role = $1, updated_at = NOW() WHERE email = $2 RETURNING id, name, email, role",
     [role, email]
   );
@@ -87,3 +89,34 @@ export const getAllUsers = async () => {
   );
   return rows;
 };
+
+// PATCH /users/:id/role. Two rules keep the shop manageable:
+//   - nobody changes their OWN role (an admin can't lock themselves out by accident)
+//   - there's always at least one admin left
+// Two admins demoting each other at the same moment could otherwise BOTH succeed and leave
+// none. So every admin row is locked first (FOR UPDATE): the second request waits, then
+// counts again and sees it would remove the last admin.
+export const changeUserRole = (actorId, userId, role) =>
+  withTransaction(async (client) => {
+    if (actorId === userId) {
+      throw new AppError(409, "You can't change your own role. Ask another admin");
+    }
+    const { rows: admins } = await client.query(
+      "SELECT id FROM users WHERE role = 'admin' ORDER BY id FOR UPDATE"
+    );
+    const { rows: [user] } = await client.query(
+      "SELECT id, role FROM users WHERE id = $1 FOR UPDATE",
+      [userId]
+    );
+    if (!user) {
+      throw new AppError(404, "User not found");
+    }
+    if (user.role === "admin" && role !== "admin" && admins.length <= 1) {
+      throw new AppError(409, "This is the last admin: make someone else an admin first");
+    }
+    const { rows } = await client.query(
+      "UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2 RETURNING id, name, email, role, created_at",
+      [role, userId]
+    );
+    return rows[0];
+  });

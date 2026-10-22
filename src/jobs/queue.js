@@ -11,6 +11,7 @@ import { PgBoss } from "pg-boss";
 import { connectionConfig } from "../config/db.js";
 import { logger } from "../config/logger.js";
 import { JOBS } from "./definitions.js";
+import { runWithContext } from "../context/request-context.js";
 
 let boss = null;
 
@@ -27,8 +28,9 @@ export const startQueue = async ({ pollingIntervalSeconds = 2, queueOverrides = 
     const { policy, ...changeable } = queueOptions;
     await boss.updateQueue(name, changeable);        // ...so apply any changed retry rules
 
+    // Changes a job makes are logged as coming from it (e.g. "job:maintenance" cancelling an order)
     await boss.work(name, { pollingIntervalSeconds }, async ([queued]) => {
-      await job.run(queued.data ?? {});
+      await runWithContext({ source: `job:${name}`, requestId: queued.id }, () => job.run(queued.data ?? {}));
     });
 
     if (job.schedule) {

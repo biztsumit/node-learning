@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { queryWithContext } from "../db/transaction.js";
 
 export const getAllCategories = async () => {
   const { rows } = await pool.query(
@@ -16,7 +17,7 @@ export const getCategoryById = async (id) => {
 };
 
 export const createCategory = async ({ name }) => {
-  const { rows } = await pool.query(
+  const { rows } = await queryWithContext(
     "INSERT INTO categories (name) VALUES ($1) RETURNING id, name",
     [name]
   );
@@ -24,7 +25,7 @@ export const createCategory = async ({ name }) => {
 };
 
 export const updateCategoryById = async (id, { name }) => {
-  const { rows } = await pool.query(
+  const { rows } = await queryWithContext(
     "UPDATE categories SET name = $1 WHERE id = $2 RETURNING id, name",
     [name, id]
   );
@@ -32,7 +33,7 @@ export const updateCategoryById = async (id, { name }) => {
 };
 
 export const deleteCategoryById = async (id) => {
-  const { rowCount } = await pool.query(
+  const { rowCount } = await queryWithContext(
     "DELETE FROM categories WHERE id = $1",
     [id]
   );

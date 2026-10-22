@@ -87,7 +87,7 @@ Ordered so each phase builds on the previous one. ⭐ = recommended next.
 ## Phase 11 — Admin insights
 
 - [x] 11.1 Sales dashboard API: revenue per day, top products, repeat customers (window functions, materialized views)
-- [ ] 11.2 Audit log: who changed what, when (prices, order statuses, roles)
+- [x] 11.2 Audit log: who changed what, when (prices, order statuses, roles)
 
 ## Phase 12 — Engineering maturity
 

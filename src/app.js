@@ -1,6 +1,7 @@
 import express from "express";
 import addressRoutes from "./routes/address.routes.js";
 import adminOrderRoutes from "./routes/admin-order.routes.js";
+import auditRoutes from "./routes/audit.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import cartRoutes from "./routes/cart.routes.js";
 import categoryRoutes from "./routes/category.routes.js";
@@ -18,6 +19,7 @@ import userRoutes from "./routes/user.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
 import wishlistRoutes from "./routes/wishlist.routes.js";
 import { env } from "./config/env.js";
+import { requestContext } from "./context/request-context.js";
 import { notFound, errorHandler } from "./middlewares/error.middleware.js";
 import { requestLogger } from "./middlewares/request-logger.middleware.js";
 import { securityHeaders, corsPolicy, apiLimiter } from "./middlewares/security.middleware.js";
@@ -34,6 +36,9 @@ app.use("/health", healthRoutes);
 
 // Then: give every request an id and log it when it finishes (even if it's blocked below)
 app.use(requestLogger);
+
+// Remember who's making this request (filled in by requireAuth), for the audit log
+app.use(requestContext);
 
 // Security next: these run for every request
 app.use(securityHeaders);
@@ -73,6 +78,7 @@ app.use("/admin/reviews", adminReviewRoutes);
 app.use("/admin/coupons", couponRoutes);
 app.use("/admin/stock-movements", stockRoutes);
 app.use("/admin/reports", reportRoutes);
+app.use("/admin/audit-log", auditRoutes);
 app.use("/admin/uploads", uploadRoutes);
 
 app.use(notFound);

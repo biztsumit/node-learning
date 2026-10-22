@@ -1,5 +1,23 @@
 import pool from "../config/db.js";
 import { logger } from "../config/logger.js";
+import { getContext } from "../context/request-context.js";
+
+// Tells the database who is acting (for the audit log and stock ledger triggers):
+// the logged-in user, the request id, and where it came from ("api", "job:maintenance").
+// set_config(..., true) = only for this transaction, so a pooled connection never carries
+// one request's identity into the next.
+const applyContext = async (client) => {
+  const context = getContext();
+  if (!context) {
+    return;
+  }
+  await client.query(
+    `SELECT set_config('app.user_id', $1, true),
+            set_config('app.request_id', $2, true),
+            set_config('app.source', $3, true)`,
+    [context.userId ?? "", context.requestId ?? "", context.source ?? ""]
+  );
+};
 
 // Runs `work` inside a database transaction: either every query in it is saved, or none are.
 //
@@ -23,6 +41,7 @@ export const withTransaction = async (work) => {
 
   try {
     await client.query("BEGIN");
+    await applyContext(client);
     const result = await work(client);
     await client.query("COMMIT");
 
@@ -43,3 +62,8 @@ export const withTransaction = async (work) => {
     client.release();
   }
 };
+
+// A single write that should say who made it (audited tables: products, categories, coupons,
+// users...). It runs in its own small transaction so the "who" settings can travel with it.
+// A plain pool.query would still be audited, just as an unknown actor.
+export const queryWithContext = (sql, values) => withTransaction((client) => client.query(sql, values));

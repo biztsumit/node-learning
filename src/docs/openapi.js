@@ -11,6 +11,7 @@ import { createVariantSchema, updateVariantSchema } from "../validators/variant.
 import { createAddressSchema, updateAddressSchema } from "../validators/address.validators.js";
 import { checkoutSchema, orderListQuerySchema, adminOrderListQuerySchema, updateOrderStatusSchema, orderNumberParamSchema } from "../validators/order.validators.js";
 import { verifyPaymentSchema } from "../validators/payment.validators.js";
+import { roleSchema, auditLogQuerySchema } from "../validators/audit.validators.js";
 import { summaryQuerySchema, revenueQuerySchema, topProductsQuerySchema, customersQuerySchema } from "../validators/report.validators.js";
 import { stockAdjustmentSchema, stockMovementListQuerySchema } from "../validators/stock.validators.js";
 import { cartQuerySchema, couponListQuerySchema, createCouponSchema, updateCouponSchema } from "../validators/coupon.validators.js";
@@ -545,6 +546,23 @@ export const openApiDocument = {
     "/users": {
       get: { tags: ["Admin"], summary: "List all users", ...LOGGED_IN, responses: { ...ok("Users", { type: "array", items: ref("User") }), ...errors(401, 403) } }
     },
+    "/users/{id}/role": {
+      parameters: [pathId("id", "User id")],
+      patch: {
+        tags: ["Admin"], summary: "Make someone an admin, or a regular user again", ...LOGGED_IN,
+        description: "409 for your own role, or for removing the last admin. Takes effect on the user's next request. Recorded in the audit log.",
+        requestBody: jsonBody(roleSchema),
+        responses: { ...ok("Updated", ref("User")), ...errors(400, 401, 403, 404, 409) }
+      }
+    },
+    "/admin/audit-log": {
+      get: {
+        tags: ["Admin"], summary: "Who changed what, and when (newest first)", ...LOGGED_IN,
+        description: "Recorded by the database itself for products, variants, categories, coupons, order changes and user changes, however they happen. Read-only, also for the database (append-only). Stock changes are in /admin/stock-movements; passwords show only as [redacted].",
+        parameters: queryParams(auditLogQuerySchema),
+        responses: { ...ok("A page of entries", { type: "array", items: ref("AuditEntry") }, { pagination: true }), ...errors(400, 401, 403) }
+      }
+    },
     "/admin/orders": {
       get: {
         tags: ["Admin"], summary: "All orders, with customer details", ...LOGGED_IN,
@@ -663,6 +681,20 @@ export const openApiDocument = {
           note: { type: ["string", "null"] },
           order: { type: ["object", "null"], properties: { id: UUID, orderNumber: { type: "string" } } },
           by: { type: ["object", "null"], properties: { id: UUID, name: { type: "string" } } },
+          createdAt: { type: "string", format: "date-time" }
+        }
+      },
+      AuditEntry: {
+        type: "object",
+        properties: {
+          id: UUID,
+          table: { type: "string", example: "product_variants" },
+          recordId: UUID,
+          action: { type: "string", enum: ["insert", "update", "delete"] },
+          changes: { type: "object", description: "update: { column: [old, new] } for what changed. insert/delete: the whole row.", example: { price: [999, 799] } },
+          actor: { type: ["object", "null"], description: "null when no logged-in person did it: see source", properties: { id: UUID, name: { type: "string" }, email: { type: "string" } } },
+          source: { type: "string", description: "api, job:<name>, script:<name>, or database (SQL run by hand)", example: "api" },
+          requestId: { type: ["string", "null"], description: "Matches the request id in the server logs" },
           createdAt: { type: "string", format: "date-time" }
         }
       },

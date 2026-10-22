@@ -3,6 +3,7 @@ import { env } from "../config/env.js";
 import { getAuthState } from "../services/user.services.js";
 import { AppError } from "../utils/app-error.js";
 import { idSchema } from "../validators/common.validators.js";
+import { setActor } from "../context/request-context.js";
 
 const isUuid = (value) => idSchema("userId").safeParse(value).success;
 
@@ -40,6 +41,8 @@ export const requireAuth = async (req, res, next) => {
 
   // The role comes from the database, so a promotion or demotion takes effect immediately
   req.user = { id: payload.userId, role: user.role };
+  // Changes made during this request are recorded as made by this user
+  setActor(req.user.id);
   next();
 };
 

@@ -1,6 +1,7 @@
 // Usage: npm run make-admin -- someone@example.com
 import pool from "../config/db.js";
 import { updateUserRole } from "../services/user.services.js";
+import { runWithContext } from "../context/request-context.js";
 
 const email = process.argv[2]?.trim().toLowerCase();
 
@@ -9,7 +10,8 @@ if (!email) {
   process.exit(1);
 }
 
-const user = await updateUserRole(email, "admin");
+// Shows up in the audit log as "script:make-admin"
+const user = await runWithContext({ source: "script:make-admin" }, () => updateUserRole(email, "admin"));
 
 if (user) {
   console.log(`${user.email} is now an admin`);
