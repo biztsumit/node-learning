@@ -1,5 +1,5 @@
-import { uploadsEnabled } from "../config/env.js";
-import { AppError } from "../utils/app-error.js";
+import { uploadsEnabled } from "../config/env.ts";
+import { AppError } from "../utils/app-error.ts";
 
 // Image upload routes answer 503 until the Cloudinary keys are set in .env
 export const requireUploadsEnabled = (req, res, next) => {

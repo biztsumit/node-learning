@@ -11,7 +11,7 @@ import { PgBoss } from "pg-boss";
 import { connectionConfig } from "../config/db.js";
 import { logger } from "../config/logger.js";
 import { JOBS } from "./definitions.js";
-import { runWithContext } from "../context/request-context.js";
+import { runWithContext } from "../context/request-context.ts";
 
 let boss = null;
 

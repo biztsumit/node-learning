@@ -10,7 +10,7 @@
 import crypto from "node:crypto";
 import pool from "../config/db.js";
 import { logger } from "../config/logger.js";
-import { AppError } from "../utils/app-error.js";
+import { AppError } from "../utils/app-error.ts";
 
 const KEY_FORMAT = /^[A-Za-z0-9_-]{8,255}$/;
 

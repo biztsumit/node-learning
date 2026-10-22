@@ -52,6 +52,9 @@ jobs:
       # Exactly the versions in package-lock.json
       - run: npm ci
 
+      # TypeScript: fails on any type error in the .ts files (nothing is compiled)
+      - run: npm run typecheck
+
       # "pretest" creates the ecommerce_test database and runs every migration on it first
       - run: npm test
 

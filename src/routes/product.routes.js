@@ -8,7 +8,7 @@ import {
   deleteProduct
 } from "../controllers/product.controllers.js";
 import { setImage } from "../controllers/upload.controllers.js";
-import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.js";
+import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.ts";
 import { clearCatalogCacheOnWrite } from "../middlewares/cache.middleware.js";
 import { requireUploadsEnabled } from "../middlewares/uploads.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";

@@ -1,6 +1,6 @@
 // Reading the audit log (it's written by database triggers, see migration 026)
 import pool from "../config/db.js";
-import { pagedQuery, timestampKey } from "../utils/cursor.js";
+import { pagedQuery, timestampKey } from "../utils/cursor.ts";
 
 const AUDIT_SORT = {
   name: "audit",

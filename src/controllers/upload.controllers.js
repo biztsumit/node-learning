@@ -1,6 +1,6 @@
 import { createProductImageUpload } from "../services/cloudinary.client.js";
 import * as productService from "../services/product.services.js";
-import { AppError } from "../utils/app-error.js";
+import { AppError } from "../utils/app-error.ts";
 
 // POST /admin/uploads/product-image — step 1: permission to upload one image to Cloudinary
 export const signProductImageUpload = (req, res) => {

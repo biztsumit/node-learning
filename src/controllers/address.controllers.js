@@ -1,5 +1,5 @@
 import * as addressService from "../services/address.services.js";
-import { AppError } from "../utils/app-error.js";
+import { AppError } from "../utils/app-error.ts";
 
 // GET /addresses
 export const getAddresses = async (req, res) => {

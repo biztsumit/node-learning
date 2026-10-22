@@ -17,7 +17,7 @@ import { stockAdjustmentSchema, stockMovementListQuerySchema } from "../validato
 import { cartQuerySchema, couponListQuerySchema, createCouponSchema, updateCouponSchema } from "../validators/coupon.validators.js";
 import { productImageSchema } from "../validators/upload.validators.js";
 import { createReviewSchema, updateReviewSchema, reviewListQuerySchema } from "../validators/review.validators.js";
-import { ORDER_STATUSES } from "../utils/order-status.js";
+import { ORDER_STATUSES } from "../utils/order-status.ts";
 
 // Every id in this API is a UUID (time-ordered UUIDv7)
 const UUID = { type: "string", format: "uuid", example: "01a14386-1238-7b41-9618-7ff4c0a7b55d" };

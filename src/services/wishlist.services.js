@@ -1,7 +1,7 @@
 // A customer's saved-for-later products
 import pool from "../config/db.js";
-import { AppError } from "../utils/app-error.js";
-import { PG_FOREIGN_KEY_VIOLATION } from "../utils/db-errors.js";
+import { AppError } from "../utils/app-error.ts";
+import { PG_FOREIGN_KEY_VIOLATION } from "../utils/db-errors.ts";
 import { thumbnailUrl } from "./cloudinary.client.js";
 
 // Plenty for a real person; stops one account from filling the table

@@ -2,10 +2,10 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import * as accountService from "../services/account.services.js";
 import * as userService from "../services/user.services.js";
-import { env } from "../config/env.js";
+import { env } from "../config/env.ts";
 import { logger } from "../config/logger.js";
-import { AppError } from "../utils/app-error.js";
-import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
+import { AppError } from "../utils/app-error.ts";
+import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.ts";
 
 // The role is not put in the token any more: requireAuth reads it fresh from the database.
 // tokenVersion must match users.token_version, or the token is refused.

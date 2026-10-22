@@ -2,9 +2,9 @@
 import bcrypt from "bcryptjs";
 import pool from "../config/db.js";
 import { logger } from "../config/logger.js";
-import { withTransaction } from "../db/transaction.js";
+import { withTransaction } from "../db/transaction.ts";
 import { enqueue } from "../jobs/queue.js";
-import { AppError } from "../utils/app-error.js";
+import { AppError } from "../utils/app-error.ts";
 import { consumeToken, createToken } from "./auth-token.services.js";
 
 const INVALID_LINK = "This link is invalid, has already been used, or has expired. Please request a new one";

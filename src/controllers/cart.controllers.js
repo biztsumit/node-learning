@@ -2,7 +2,7 @@ import * as cartService from "../services/cart.services.js";
 import { previewCoupon } from "../services/coupon.services.js";
 import { optionsLabel } from "../services/variant.services.js";
 import { MAX_QUANTITY_PER_ITEM } from "../validators/cart.validators.js";
-import { AppError } from "../utils/app-error.js";
+import { AppError } from "../utils/app-error.ts";
 
 // "T-Shirt" or "T-Shirt (Size: M)"
 const displayName = (variant) =>

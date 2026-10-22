@@ -1,8 +1,8 @@
 // Discount codes: the admin side (create, change, switch off) and the rules for using one.
 import pool from "../config/db.js";
-import { queryWithContext, withTransaction } from "../db/transaction.js";
-import { AppError } from "../utils/app-error.js";
-import { PG_RESTRICT_VIOLATION, PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
+import { queryWithContext, withTransaction } from "../db/transaction.ts";
+import { AppError } from "../utils/app-error.ts";
+import { PG_RESTRICT_VIOLATION, PG_UNIQUE_VIOLATION } from "../utils/db-errors.ts";
 
 const COLUMNS = `id, code, description, discount_type, discount_value, min_order_amount, max_discount,
   starts_at, expires_at, usage_limit, per_user_limit, times_used, is_active, created_at, updated_at`;

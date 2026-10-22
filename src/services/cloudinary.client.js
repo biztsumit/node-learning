@@ -1,7 +1,7 @@
 // Everything that talks to Cloudinary lives in this one file.
 // Docs: https://cloudinary.com/documentation/upload_images#authenticated_requests
 import crypto, { randomUUID } from "node:crypto";
-import { env } from "../config/env.js";
+import { env } from "../config/env.ts";
 
 // Every product image is stored under this path in your Cloudinary account
 export const PRODUCT_IMAGE_FOLDER = "ecommerce/products";

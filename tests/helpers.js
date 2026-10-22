@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import request from "supertest";
 import app from "../src/app.js";
 import pool from "../src/config/db.js";
-import { slugify } from "../src/utils/slugify.js";
+import { slugify } from "../src/utils/slugify.ts";
 
 // Sends requests straight to the Express app, no real server or port needed:
 //   const res = await api().get("/products");

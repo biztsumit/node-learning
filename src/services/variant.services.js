@@ -1,10 +1,10 @@
 // Product variants: the actual things you buy ("T-Shirt, size M, blue"), each with its own
 // price and stock. Every product has at least one; a simple product has one with no options.
 import pool from "../config/db.js";
-import { withTransaction } from "../db/transaction.js";
-import { AppError } from "../utils/app-error.js";
-import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
-import { setStockContext } from "../db/stock-context.js";
+import { withTransaction } from "../db/transaction.ts";
+import { AppError } from "../utils/app-error.ts";
+import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.ts";
+import { setStockContext } from "../db/stock-context.ts";
 
 // {"size": "M", "colour": "Blue"} → "Size: M, Colour: Blue"   ({} → "")
 export const optionsLabel = (options = {}) =>

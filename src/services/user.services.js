@@ -1,6 +1,6 @@
 import pool from "../config/db.js";
-import { queryWithContext, withTransaction } from "../db/transaction.js";
-import { AppError } from "../utils/app-error.js";
+import { queryWithContext, withTransaction } from "../db/transaction.ts";
+import { AppError } from "../utils/app-error.ts";
 
 export const findUserByEmail = async (email) => {
   const { rows } = await pool.query(

@@ -1,6 +1,6 @@
 import pool from "../config/db.js";
-import { withTransaction } from "../db/transaction.js";
-import { AppError } from "../utils/app-error.js";
+import { withTransaction } from "../db/transaction.ts";
+import { AppError } from "../utils/app-error.ts";
 import { postalCodeProblem } from "../validators/address.validators.js";
 
 const ADDRESS_COLUMNS = `

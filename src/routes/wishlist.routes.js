@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getWishlist, saveProduct, unsaveProduct } from "../controllers/wishlist.controllers.js";
-import { requireAuth } from "../middlewares/auth.middleware.js";
+import { requireAuth } from "../middlewares/auth.middleware.ts";
 import { validate } from "../middlewares/validate.middleware.js";
 import { productIdParamSchema } from "../validators/stock.validators.js";
 

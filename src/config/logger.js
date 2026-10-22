@@ -1,5 +1,5 @@
 import pino from "pino";
-import { env } from "./env.js";
+import { env } from "./env.ts";
 
 // One logger for the whole server. Each entry is a JSON object, e.g.
 // {"level":30,"time":1760500000000,"msg":"Server running","port":3000}

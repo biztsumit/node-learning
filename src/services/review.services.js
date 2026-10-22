@@ -1,7 +1,7 @@
 import pool from "../config/db.js";
-import { withTransaction } from "../db/transaction.js";
-import { AppError } from "../utils/app-error.js";
-import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
+import { withTransaction } from "../db/transaction.ts";
+import { AppError } from "../utils/app-error.ts";
+import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.ts";
 
 // "riya sharma" → "Riya S." (a public page shouldn't show customers' full names)
 const displayName = (fullName) => {

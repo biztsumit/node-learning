@@ -1,5 +1,5 @@
 import pool from "../config/db.js";
-import { queryWithContext } from "../db/transaction.js";
+import { queryWithContext } from "../db/transaction.ts";
 
 export const getAllCategories = async () => {
   const { rows } = await pool.query(

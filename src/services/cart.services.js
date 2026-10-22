@@ -1,5 +1,5 @@
 import pool from "../config/db.js";
-import { AppError } from "../utils/app-error.js";
+import { AppError } from "../utils/app-error.ts";
 import { optionsLabel } from "./variant.services.js";
 
 // Every query here filters by user_id, so a user can only ever touch their own cart.

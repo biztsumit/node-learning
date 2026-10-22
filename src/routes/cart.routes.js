@@ -6,7 +6,7 @@ import {
   removeItem,
   clearCart
 } from "../controllers/cart.controllers.js";
-import { requireAuth } from "../middlewares/auth.middleware.js";
+import { requireAuth } from "../middlewares/auth.middleware.ts";
 import { idempotency } from "../middlewares/idempotency.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import { idParamSchema } from "../validators/common.validators.js";

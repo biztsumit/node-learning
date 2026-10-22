@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { idSchema, cursorPaginationFields, pageOrCursor } from "./common.validators.js";
-import { ORDER_STATUSES } from "../utils/order-status.js";
-import { ORDER_NUMBER_PATTERN } from "../utils/order-number.js";
+import { ORDER_STATUSES } from "../utils/order-status.ts";
+import { ORDER_NUMBER_PATTERN } from "../utils/order-number.ts";
 import { couponCodeSchema } from "./coupon.validators.js";
 
 // "ORD-7K3M9Q". Also accepts what people actually type: "ord-7k3m9q", " 7K3M9Q "

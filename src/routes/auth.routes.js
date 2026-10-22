@@ -11,7 +11,7 @@ import {
   verifyEmail,
   resendVerification
 } from "../controllers/auth.controllers.js";
-import { requireAuth } from "../middlewares/auth.middleware.js";
+import { requireAuth } from "../middlewares/auth.middleware.ts";
 import { emailLimiter, failedLoginLimiter, signupLimiter } from "../middlewares/security.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import {

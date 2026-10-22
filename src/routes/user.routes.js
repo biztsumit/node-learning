@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getUsers, updateUserRole } from "../controllers/user.controllers.js";
-import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.js";
+import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.ts";
 import { validate } from "../middlewares/validate.middleware.js";
 import { idParamSchema } from "../validators/common.validators.js";
 import { roleSchema } from "../validators/audit.validators.js";

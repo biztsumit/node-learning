@@ -4,7 +4,7 @@ import { describe, it, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { enqueue, startQueue, stopQueue } from "../src/jobs/queue.js";
 import { sentEmails } from "../src/emails/transport.js";
-import { withTransaction } from "../src/db/transaction.js";
+import { withTransaction } from "../src/db/transaction.ts";
 import {
   api, pool, resetDatabase, closeDatabase,
   createUser, createProduct, createAddress, placeOrder, setVariantFields

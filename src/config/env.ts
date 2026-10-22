@@ -94,7 +94,7 @@ const envSchema = z.object({
     if (settings.DATABASE_URL) {
       return;
     }
-    for (const key of ["DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME"]) {
+    for (const key of ["DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME"] as const) {
       if (settings[key] === undefined) {
         ctx.addIssue({ code: "custom", path: [key], message: "required (or set DATABASE_URL instead)" });
       }

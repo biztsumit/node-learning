@@ -1,4 +1,4 @@
-import { env } from "./config/env.js";
+import { env } from "./config/env.ts";
 import { logger } from "./config/logger.js";
 import app from "./app.js";
 import pool, { connectDB } from "./config/db.js";

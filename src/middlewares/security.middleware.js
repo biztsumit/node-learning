@@ -1,8 +1,8 @@
 import cors from "cors";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
-import { env } from "../config/env.js";
-import { AppError } from "../utils/app-error.js";
+import { env } from "../config/env.ts";
+import { AppError } from "../utils/app-error.ts";
 
 // ---------- Safe HTTP headers ----------
 

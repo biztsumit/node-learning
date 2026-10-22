@@ -1,7 +1,7 @@
 // Everything that talks to Razorpay lives in this one file.
 // Docs: https://razorpay.com/docs/api/orders/ and https://razorpay.com/docs/webhooks/
 import crypto from "node:crypto";
-import { env } from "../config/env.js";
+import { env } from "../config/env.ts";
 
 const API_URL = "https://api.razorpay.com/v1";
 

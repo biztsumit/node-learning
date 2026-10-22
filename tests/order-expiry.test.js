@@ -1,6 +1,6 @@
 import { describe, it, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
-import { env } from "../src/config/env.js";
+import { env } from "../src/config/env.ts";
 import { expireUnpaidOrders } from "../src/services/order.services.js";
 import {
   api, pool, resetDatabase, closeDatabase, warmUpPool, hmac,

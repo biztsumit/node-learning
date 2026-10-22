@@ -1,18 +1,18 @@
 import pool from "../config/db.js";
-import { env } from "../config/env.js";
+import { env } from "../config/env.ts";
 import { logger } from "../config/logger.js";
-import { withTransaction } from "../db/transaction.js";
-import { AppError } from "../utils/app-error.js";
-import { canChangeStatus } from "../utils/order-status.js";
-import { orderNumbers } from "../utils/order-number.js";
-import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
+import { withTransaction } from "../db/transaction.ts";
+import { AppError } from "../utils/app-error.ts";
+import { canChangeStatus } from "../utils/order-status.ts";
+import { orderNumbers } from "../utils/order-number.ts";
+import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.ts";
 import { enqueue } from "../jobs/queue.js";
 import { getAddress } from "./address.services.js";
 import { processRefund, requestRefund } from "./refund.services.js";
 import { optionsLabel } from "./variant.services.js";
 import { releaseCoupon, recordRedemption, reserveCoupon } from "./coupon.services.js";
-import { setStockContext } from "../db/stock-context.js";
-import { pagedQuery, timestampKey } from "../utils/cursor.js";
+import { setStockContext } from "../db/stock-context.ts";
+import { pagedQuery, timestampKey } from "../utils/cursor.ts";
 
 // ---------- Reading orders ----------
 

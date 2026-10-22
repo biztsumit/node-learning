@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
-import { orderNumbers, ORDER_NUMBER_ALPHABET } from "../src/utils/order-number.js";
+import { orderNumbers, ORDER_NUMBER_ALPHABET } from "../src/utils/order-number.ts";
 import {
   api, pool, resetDatabase, closeDatabase,
   createUser, createProduct, createAddress, placeOrder

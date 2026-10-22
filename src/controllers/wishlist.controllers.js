@@ -1,5 +1,5 @@
 import * as wishlistService from "../services/wishlist.services.js";
-import { AppError } from "../utils/app-error.js";
+import { AppError } from "../utils/app-error.ts";
 
 const sendWishlist = async (res, userId) => {
   const items = await wishlistService.getWishlist(userId);

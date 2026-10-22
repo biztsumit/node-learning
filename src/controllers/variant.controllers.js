@@ -1,5 +1,5 @@
 import * as variantService from "../services/variant.services.js";
-import { AppError } from "../utils/app-error.js";
+import { AppError } from "../utils/app-error.ts";
 
 // GET /products/:id/variants (public)
 export const getVariants = async (req, res) => {

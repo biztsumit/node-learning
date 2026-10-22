@@ -6,7 +6,7 @@ import {
   getCustomers,
   refreshReports
 } from "../controllers/report.controllers.js";
-import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.js";
+import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.ts";
 import { validate } from "../middlewares/validate.middleware.js";
 import {
   summaryQuerySchema,

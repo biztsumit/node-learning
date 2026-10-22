@@ -1,7 +1,7 @@
 // Gives this local server a public https URL using ngrok, so outside services
 // (like Razorpay webhooks) can reach it. Development only: never set NGROK_AUTHTOKEN in production.
 import ngrok from "@ngrok/ngrok";
-import { env } from "./config/env.js";
+import { env } from "./config/env.ts";
 import { logger } from "./config/logger.js";
 
 export const startTunnel = async (port) => {

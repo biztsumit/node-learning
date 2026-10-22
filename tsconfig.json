@@ -1,0 +1,32 @@
+// TypeScript settings. We never compile to JavaScript: Node 24 runs .ts files itself by
+// stripping the types out. tsc is only the CHECKER (npm run typecheck), run in CI.
+//
+// The migration is gradual: .ts files are checked strictly; .js files still run as before
+// and aren't checked (checkJs: false) until they're converted. TypeScript still reads them,
+// so a .ts file calling into a .js one gets whatever types can be inferred from it.
+{
+  "compilerOptions": {
+    // Node's own module rules: ES modules, imports need their file extension
+    "module": "nodenext",
+    "target": "es2024",
+    "lib": ["es2024"],
+    "types": ["node"],
+    "noEmit": true,
+
+    // Only TypeScript syntax that can simply be erased (no enums, no namespaces, no
+    // constructor parameter properties): that's what Node's type stripping understands
+    "erasableSyntaxOnly": true,
+    // "import type" for things that are only types, so stripping leaves no empty imports
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+
+    "allowJs": true,
+    "checkJs": false,
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src", "tests"]
+}

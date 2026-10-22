@@ -1,11 +1,11 @@
 // The stock ledger: why stock changed. The database records every change itself (a trigger
 // on product_variants); this file tells it the reason, and lets admins adjust and read it.
 import pool from "../config/db.js";
-import { withTransaction } from "../db/transaction.js";
-import { AppError } from "../utils/app-error.js";
-import { setStockContext } from "../db/stock-context.js";
+import { withTransaction } from "../db/transaction.ts";
+import { AppError } from "../utils/app-error.ts";
+import { setStockContext } from "../db/stock-context.ts";
 import { optionsLabel } from "./variant.services.js";
-import { pagedQuery, timestampKey } from "../utils/cursor.js";
+import { pagedQuery, timestampKey } from "../utils/cursor.ts";
 
 // POST /admin/stock-movements: "10 arrived", "2 broke". A CHANGE (+10 / -2), not a new total:
 // stock = stock + change works even if a checkout sells some at the same moment,

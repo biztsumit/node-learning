@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { signProductImageUpload } from "../controllers/upload.controllers.js";
-import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.js";
+import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.ts";
 import { requireUploadsEnabled } from "../middlewares/uploads.middleware.js";
 
 // Mounted at /admin/uploads

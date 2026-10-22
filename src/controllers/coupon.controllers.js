@@ -1,5 +1,5 @@
 import * as couponService from "../services/coupon.services.js";
-import { AppError } from "../utils/app-error.js";
+import { AppError } from "../utils/app-error.ts";
 
 // GET /admin/coupons
 export const getCoupons = async (req, res) => {

@@ -7,7 +7,7 @@ import {
   cancelMyOrder
 } from "../controllers/order.controllers.js";
 import { startOrderPayment, verifyOrderPayment } from "../controllers/payment.controllers.js";
-import { requireAuth } from "../middlewares/auth.middleware.js";
+import { requireAuth } from "../middlewares/auth.middleware.ts";
 import { idempotency } from "../middlewares/idempotency.middleware.js";
 import { requirePaymentsEnabled } from "../middlewares/payments.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";

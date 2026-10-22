@@ -1,4 +1,4 @@
-import { AppError } from "../utils/app-error.js";
+import { AppError } from "../utils/app-error.ts";
 
 // Runs only if no route matched the URL
 export const notFound = (req, res, next) => {

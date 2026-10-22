@@ -1,7 +1,7 @@
 // Sends an email, or (EMAIL_TRANSPORT=log) just records it.
 import fs from "node:fs/promises";
 import path from "node:path";
-import { env } from "../config/env.js";
+import { env } from "../config/env.ts";
 import { logger } from "../config/logger.js";
 
 // The most recent "sent" emails in log mode, newest last (tests read this)

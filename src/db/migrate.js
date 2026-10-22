@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import pool from "../config/db.js";
-import { withTransaction } from "./transaction.js";
+import { withTransaction } from "./transaction.ts";
 
 const migrationsDir = path.join(import.meta.dirname, "migrations");
 

@@ -1,7 +1,7 @@
 import * as productService from "../services/product.services.js";
 import { cacheKey, catalogCache } from "../cache/catalog-cache.js";
-import { AppError } from "../utils/app-error.js";
-import { PG_FOREIGN_KEY_VIOLATION } from "../utils/db-errors.js";
+import { AppError } from "../utils/app-error.ts";
+import { PG_FOREIGN_KEY_VIOLATION } from "../utils/db-errors.ts";
 
 // categoryId points at a category that doesn't exist
 const handleDbError = (err) => {

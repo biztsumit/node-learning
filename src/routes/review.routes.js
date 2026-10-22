@@ -6,7 +6,7 @@ import {
   removeMyReview,
   removeAnyReview
 } from "../controllers/review.controllers.js";
-import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.js";
+import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.ts";
 import { clearCatalogCacheOnWrite } from "../middlewares/cache.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import { idParamSchema } from "../validators/common.validators.js";

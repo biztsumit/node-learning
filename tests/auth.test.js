@@ -72,7 +72,7 @@ describe("sessions", () => {
 
   it("treats tokens from before the UUID switch (numeric userId) as ended sessions", async () => {
     const { default: jwt } = await import("jsonwebtoken");
-    const oldToken = jwt.sign({ userId: 1, tokenVersion: 0 }, process.env.JWT_SECRET ?? (await import("../src/config/env.js")).env.JWT_SECRET);
+    const oldToken = jwt.sign({ userId: 1, tokenVersion: 0 }, process.env.JWT_SECRET ?? (await import("../src/config/env.ts")).env.JWT_SECRET);
     const res = await api().get("/auth/me").set("Authorization", `Bearer ${oldToken}`).expect(401);
     assert.match(res.body.message, /session has ended/);
   });

@@ -5,7 +5,7 @@
 //
 // Each server has its own copy in memory, so nothing extra to run. The catch with caching is
 // knowing when data is out of date; see invalidation.js for how that's handled.
-import { env } from "../config/env.js";
+import { env } from "../config/env.ts";
 
 const MAX_ENTRIES = 500;   // different searches/pages each take one entry; oldest go first
 

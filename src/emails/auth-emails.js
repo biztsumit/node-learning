@@ -1,5 +1,5 @@
 // Emails with one-time links: reset your password, verify your email address.
-import { env } from "../config/env.js";
+import { env } from "../config/env.ts";
 import { TOKEN_LIFETIME_MINUTES } from "../services/auth-token.services.js";
 import { escapeHtml } from "./order-emails.js";
 

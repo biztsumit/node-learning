@@ -1,4 +1,4 @@
-import { AppError } from "../utils/app-error.js";
+import { AppError } from "../utils/app-error.ts";
 
 // Checks parts of the request against zod schemas before the controller runs.
 // Usage: validate({ params: idParamSchema, body: productSchema, query: listQuerySchema })

@@ -4,7 +4,7 @@ import {
   api, pool, resetDatabase, closeDatabase, warmUpPool,
   createUser, createProduct, createAddress, placeOrder
 } from "./helpers.js";
-import { runWithContext } from "../src/context/request-context.js";
+import { runWithContext } from "../src/context/request-context.ts";
 import { expireUnpaidOrders } from "../src/services/order.services.js";
 
 beforeEach(resetDatabase);

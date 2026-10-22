@@ -1,7 +1,7 @@
 // Usage: npm run seed
 // Adds sample data so a fresh database has something to work with.
 import pool from "../config/db.js";
-import { slugify } from "../utils/slugify.js";
+import { slugify } from "../utils/slugify.ts";
 
 const categories = ["Clothing", "Footwear"];
 

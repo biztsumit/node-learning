@@ -9,7 +9,7 @@
 // Never call an outside API while you still might roll back: Razorpay can't be rolled back.
 import pool from "../config/db.js";
 import { logger } from "../config/logger.js";
-import { withTransaction } from "../db/transaction.js";
+import { withTransaction } from "../db/transaction.ts";
 import { enqueue } from "../jobs/queue.js";
 import * as razorpay from "./razorpay.client.js";
 

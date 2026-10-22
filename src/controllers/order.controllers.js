@@ -1,5 +1,5 @@
 import * as orderService from "../services/order.services.js";
-import { AppError } from "../utils/app-error.js";
+import { AppError } from "../utils/app-error.ts";
 
 // ---------- Customers (only ever their own orders) ----------
 

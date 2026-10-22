@@ -1,6 +1,6 @@
 // The emails a customer gets about their order. Each one has an HTML and a plain-text
 // version (some email apps show only text, and spam filters like having both).
-import { env } from "../config/env.js";
+import { env } from "../config/env.ts";
 
 // Anything that came from a user (names, product names, addresses) goes through this.
 // An email is HTML: an unescaped product name like "<img src=x onerror=...>" would become markup.

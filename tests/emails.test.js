@@ -93,7 +93,7 @@ describe("order emails", () => {
   });
 
   it("go to EMAIL_REDIRECT_TO instead, when it's set (development safety net)", async () => {
-    const { env } = await import("../src/config/env.js");
+    const { env } = await import("../src/config/env.ts");
     env.EMAIL_REDIRECT_TO = "developer@example.com";
     try {
       const { user, order } = await customerWithOrder();

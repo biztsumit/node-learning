@@ -1,15 +1,15 @@
 import { randomBytes } from "node:crypto";
 import pool from "../config/db.js";
 import { logger } from "../config/logger.js";
-import { queryWithContext, withTransaction } from "../db/transaction.js";
-import { slugify } from "../utils/slugify.js";
-import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.js";
+import { queryWithContext, withTransaction } from "../db/transaction.ts";
+import { slugify } from "../utils/slugify.ts";
+import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.ts";
 import { productImagePublicId, thumbnailUrl } from "./cloudinary.client.js";
 import { enqueue } from "../jobs/queue.js";
-import { AppError } from "../utils/app-error.js";
+import { AppError } from "../utils/app-error.ts";
 import { listVariants } from "./variant.services.js";
-import { setStockContext } from "../db/stock-context.js";
-import { afterCursor, cursorPage, timestampKey } from "../utils/cursor.js";
+import { setStockContext } from "../db/stock-context.ts";
+import { afterCursor, cursorPage, timestampKey } from "../utils/cursor.ts";
 
 // LEFT JOIN keeps products that have no category (their category columns come back as NULL)
 const SELECT_PRODUCTS = `
