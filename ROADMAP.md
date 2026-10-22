@@ -100,3 +100,6 @@ Ordered so each phase builds on the previous one. ⭐ = recommended next.
 ## Phase 13 — A frontend
 
 - [ ] 13.1 Next.js storefront and admin panel using this API (auth with refresh cookies, Razorpay Checkout)
+  - [x] Storefront: home, catalog with search/filters/cursor pages, product pages with variants, login (with 2FA) / register, cart with coupons
+  - [ ] Checkout with addresses and Razorpay, order history, account page (2FA setup)
+  - [ ] Admin panel: products and variants, orders, coupons, reports

@@ -19,6 +19,7 @@ process.env.CACHE_TTL_SECONDS = "0";
 process.env.CORS_ORIGINS = "http://localhost:5173";
 // The real default (short-lived access tokens), whatever a developer's .env says
 process.env.JWT_EXPIRES_IN = "15m";
+process.env.REFRESH_COOKIE_PATH = "/auth";
 
 // Fake Razorpay keys. The payment tests intercept calls to Razorpay, so nothing leaves this machine.
 process.env.RAZORPAY_KEY_ID = "rzp_test_AUTOMATEDTESTS";

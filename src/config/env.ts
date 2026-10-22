@@ -33,6 +33,9 @@ const envSchema = z.object({
   //   lax  = only our own site (frontend and API on the same site, e.g. behind a proxy)
   //   none = any site allowed by CORS (frontend on a different domain); needs HTTPS
   REFRESH_COOKIE_SAMESITE: z.enum(["lax", "strict", "none"]).default("lax"),
+  // The URL path the cookie is sent to: our /auth routes. Behind a frontend that forwards
+  // /api/* to this API (like the Next.js app in web/), the browser sees them at /api/auth.
+  REFRESH_COOKIE_PATH: z.string().regex(/^\/[\w/-]*$/, { error: "must be a URL path like /auth" }).default("/auth"),
 
   // Two-factor login. true = admins can't use admin routes until they've turned it on and
   // logged in with a code. Off by default so existing admins aren't locked out: turn on

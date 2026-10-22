@@ -9,7 +9,8 @@
 # Installed inside the image instead (for Linux, from package-lock.json)
 node_modules
 
-# Not needed to run the API
+# Not needed to run the API (web/ is the Next.js frontend: a separate app)
+web
 .git
 .github
 .emails

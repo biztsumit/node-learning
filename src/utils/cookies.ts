@@ -4,9 +4,6 @@ import { env } from "../config/env.ts";
 // The refresh token's cookie
 export const REFRESH_COOKIE = "refresh_token";
 
-// Only sent to the /auth routes (refresh, logout), never with ordinary API requests
-const REFRESH_COOKIE_PATH = "/auth";
-
 // httpOnly: page JavaScript can't read it, so an XSS bug can't steal it.
 // secure: only sent over HTTPS (required by browsers for SameSite=None).
 // sameSite: which sites may make the browser send it (see REFRESH_COOKIE_SAMESITE in env.ts).
@@ -14,7 +11,8 @@ const refreshCookieOptions = (): CookieOptions => ({
   httpOnly: true,
   secure: env.NODE_ENV === "production" || env.REFRESH_COOKIE_SAMESITE === "none",
   sameSite: env.REFRESH_COOKIE_SAMESITE,
-  path: REFRESH_COOKIE_PATH
+  // Only sent to the /auth routes (refresh, logout), never with ordinary API requests
+  path: env.REFRESH_COOKIE_PATH
 });
 
 export const setRefreshCookie = (res: Response, token: string, expiresAt: Date): void => {
