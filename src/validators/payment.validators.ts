@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const razorpayId = (label, prefix) => z
+const razorpayId = (label: string, prefix: string) => z
   .string({ error: `${label} is required` })
   .trim()
   .min(1, { error: `${label} is required` })
@@ -15,3 +15,7 @@ export const verifyPaymentSchema = z.object({
     .string({ error: "razorpaySignature is required" })
     .regex(/^[a-f0-9]{64}$/, { error: "razorpaySignature must be a 64-character hex string" })
 });
+
+// The TypeScript types of the CHECKED data (after trimming, defaults, coercion...).
+// Services use these, so the shape is written once: in the schema.
+export type VerifyPayment = z.infer<typeof verifyPaymentSchema>;

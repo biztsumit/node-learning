@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { idSchema, cursorPaginationFields, pageOrCursor } from "./common.validators.js";
+import { idSchema, cursorPaginationFields, pageOrCursor } from "./common.validators.ts";
 import { ORDER_STATUSES } from "../utils/order-status.ts";
 import { ORDER_NUMBER_PATTERN } from "../utils/order-number.ts";
-import { couponCodeSchema } from "./coupon.validators.js";
+import { couponCodeSchema } from "./coupon.validators.ts";
 
 // "ORD-7K3M9Q". Also accepts what people actually type: "ord-7k3m9q", " 7K3M9Q "
 const orderNumberSchema = z
@@ -46,3 +46,11 @@ export const adminOrderListQuerySchema = z.object({
 export const updateOrderStatusSchema = z.object({
   status: statusSchema
 });
+
+// The TypeScript types of the CHECKED data (after trimming, defaults, coercion...).
+// Services use these, so the shape is written once: in the schema.
+export type OrderNumberParam = z.infer<typeof orderNumberParamSchema>;
+export type Checkout = z.infer<typeof checkoutSchema>;
+export type OrderListQuery = z.infer<typeof orderListQuerySchema>;
+export type AdminOrderListQuery = z.infer<typeof adminOrderListQuerySchema>;
+export type UpdateOrderStatus = z.infer<typeof updateOrderStatusSchema>;

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { idSchema, MAX_DB_INTEGER, cursorPaginationFields, pageOrCursor } from "./common.validators.js";
+import { idSchema, MAX_DB_INTEGER, cursorPaginationFields, pageOrCursor } from "./common.validators.ts";
 
 export const productSchema = z.object({
   name: z
@@ -42,7 +42,7 @@ export const productUpdateSchema = productSchema.extend({
 
 // Query string of GET /products, e.g. ?search=shirt&category=<uuid>&sort=price_asc&page=2
 // Everything in a query string is text, so numbers use z.coerce.
-const optionalPrice = (label) => z.coerce
+const optionalPrice = (label: string) => z.coerce
   .number({ error: `${label} must be a number` })
   .int({ error: `${label} must be a whole number` })
   .min(0, { error: `${label} can't be negative` })
@@ -73,3 +73,9 @@ export const productListQuerySchema = z
     (query) => query.minPrice === undefined || query.maxPrice === undefined || query.minPrice <= query.maxPrice,
     { error: "minPrice can't be greater than maxPrice", path: ["minPrice"] }
   );
+
+// The TypeScript types of the CHECKED data (after trimming, defaults, coercion...).
+// Services use these, so the shape is written once: in the schema.
+export type Product = z.infer<typeof productSchema>;
+export type ProductUpdate = z.infer<typeof productUpdateSchema>;
+export type ProductListQuery = z.infer<typeof productListQuerySchema>;

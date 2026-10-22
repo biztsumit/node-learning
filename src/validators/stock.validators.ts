@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { idSchema, cursorPaginationFields, pageOrCursor } from "./common.validators.js";
+import { idSchema, cursorPaginationFields, pageOrCursor } from "./common.validators.ts";
 
 // For /wishlist/:productId
 export const productIdParamSchema = z.object({
@@ -8,8 +8,8 @@ export const productIdParamSchema = z.object({
 
 // The reasons an admin can give. 'initial', 'order_placed', 'order_cancelled' and 'manual'
 // are written by the app/database itself, never chosen by hand.
-export const ADJUSTMENT_REASONS = ["restock", "damaged", "returned", "correction"];
-export const MOVEMENT_REASONS = [...ADJUSTMENT_REASONS, "initial", "order_placed", "order_cancelled", "manual"];
+export const ADJUSTMENT_REASONS = ["restock", "damaged", "returned", "correction"] as const;
+export const MOVEMENT_REASONS = [...ADJUSTMENT_REASONS, "initial", "order_placed", "order_cancelled", "manual"] as const;
 
 // POST /admin/stock-movements  { variantId, change: 10, reason: "restock", note? }
 export const stockAdjustmentSchema = z
@@ -42,3 +42,9 @@ export const stockMovementListQuerySchema = z.object({
   reason: z.enum(MOVEMENT_REASONS, { error: `reason must be one of: ${MOVEMENT_REASONS.join(", ")}` }).optional(),
   ...cursorPaginationFields
 }).refine(...pageOrCursor);
+
+// The TypeScript types of the CHECKED data (after trimming, defaults, coercion...).
+// Services use these, so the shape is written once: in the schema.
+export type ProductIdParam = z.infer<typeof productIdParamSchema>;
+export type StockAdjustment = z.infer<typeof stockAdjustmentSchema>;
+export type StockMovementListQuery = z.infer<typeof stockMovementListQuerySchema>;

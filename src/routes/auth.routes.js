@@ -13,7 +13,7 @@ import {
 } from "../controllers/auth.controllers.js";
 import { requireAuth } from "../middlewares/auth.middleware.ts";
 import { emailLimiter, failedLoginLimiter, signupLimiter } from "../middlewares/security.middleware.js";
-import { validate } from "../middlewares/validate.middleware.js";
+import { validate } from "../middlewares/validate.middleware.ts";
 import {
   registerSchema,
   loginSchema,
@@ -22,7 +22,7 @@ import {
   forgotPasswordSchema,
   resetPasswordSchema,
   verifyEmailSchema
-} from "../validators/auth.validators.js";
+} from "../validators/auth.validators.ts";
 
 const router = Router();
 

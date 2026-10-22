@@ -1,4 +1,4 @@
-import * as auditService from "../services/audit.services.js";
+import * as auditService from "../services/audit.services.ts";
 
 // GET /admin/audit-log
 export const getAuditLog = async (req, res) => {

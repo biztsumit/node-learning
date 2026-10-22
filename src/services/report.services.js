@@ -10,7 +10,7 @@
 //   ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at)
 //                                          → 1 for each customer's first order, 2 for the next...
 import pool from "../config/db.js";
-import { REPORT_TIME_ZONE, addDays } from "../validators/report.validators.js";
+import { REPORT_TIME_ZONE, addDays } from "../validators/report.validators.ts";
 
 // Orders that count as sales: the money has been received
 const SOLD = "o.status IN ('paid', 'shipped', 'delivered')";

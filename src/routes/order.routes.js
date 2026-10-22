@@ -10,10 +10,10 @@ import { startOrderPayment, verifyOrderPayment } from "../controllers/payment.co
 import { requireAuth } from "../middlewares/auth.middleware.ts";
 import { idempotency } from "../middlewares/idempotency.middleware.js";
 import { requirePaymentsEnabled } from "../middlewares/payments.middleware.js";
-import { validate } from "../middlewares/validate.middleware.js";
-import { idParamSchema } from "../validators/common.validators.js";
-import { checkoutSchema, orderListQuerySchema, orderNumberParamSchema } from "../validators/order.validators.js";
-import { verifyPaymentSchema } from "../validators/payment.validators.js";
+import { validate } from "../middlewares/validate.middleware.ts";
+import { idParamSchema } from "../validators/common.validators.ts";
+import { checkoutSchema, orderListQuerySchema, orderNumberParamSchema } from "../validators/order.validators.ts";
+import { verifyPaymentSchema } from "../validators/payment.validators.ts";
 
 const router = Router();
 

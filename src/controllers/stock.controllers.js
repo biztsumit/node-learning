@@ -1,4 +1,4 @@
-import * as stockService from "../services/stock.services.js";
+import * as stockService from "../services/stock.services.ts";
 
 // GET /admin/stock-movements
 export const getStockMovements = async (req, res) => {

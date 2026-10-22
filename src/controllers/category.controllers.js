@@ -1,4 +1,4 @@
-import * as categoryService from "../services/category.services.js";
+import * as categoryService from "../services/category.services.ts";
 import { catalogCache } from "../cache/catalog-cache.js";
 import { AppError } from "../utils/app-error.ts";
 import { PG_UNIQUE_VIOLATION, PG_RESTRICT_VIOLATION } from "../utils/db-errors.ts";

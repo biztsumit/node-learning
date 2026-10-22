@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { idSchema, MAX_DB_INTEGER } from "./common.validators.js";
+import { idSchema, MAX_DB_INTEGER } from "./common.validators.ts";
 
 // {"size": "M", "colour": "Blue"}: up to 3 options. Names are stored lowercase and trimmed,
 // so "Size" and " size " count as the same option.
@@ -50,3 +50,9 @@ export const variantParamsSchema = z.object({
   id: idSchema("id"),
   variantId: idSchema("variantId")
 });
+
+// The TypeScript types of the CHECKED data (after trimming, defaults, coercion...).
+// Services use these, so the shape is written once: in the schema.
+export type CreateVariant = z.infer<typeof createVariantSchema>;
+export type UpdateVariant = z.infer<typeof updateVariantSchema>;
+export type VariantParams = z.infer<typeof variantParamsSchema>;

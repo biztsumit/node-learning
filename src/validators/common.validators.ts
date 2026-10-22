@@ -5,7 +5,7 @@ export const MAX_DB_INTEGER = 2147483647;
 
 // A database id: a UUID like "01a14386-1238-7b41-9618-7ff4c0a7b55d".
 // Checking the format here means a bad id gets a clear 400, instead of a database error (500).
-export const idSchema = (label) => z
+export const idSchema = (label: string) => z
   .string({ error: `${label} is required` })
   .trim()
   .toLowerCase()
@@ -49,7 +49,16 @@ export const cursorPaginationFields = {
 };
 
 // Add to a list schema using cursorPaginationFields: page numbers and cursors don't mix
-export const pageOrCursor = [
+// Typed as a fixed pair (a "tuple"), so it can be spread into .refine(check, options)
+export const pageOrCursor: [
+  (query: { page?: number; cursor?: string }) => boolean,
+  { error: string; path: string[] }
+] = [
   (query) => query.page === undefined || query.cursor === undefined,
   { error: "Use either page or cursor, not both", path: ["cursor"] }
 ];
+
+// The TypeScript types of the CHECKED data (after trimming, defaults, coercion...).
+// Services use these, so the shape is written once: in the schema.
+export type IdParam = z.infer<typeof idParamSchema>;
+export type SlugParam = z.infer<typeof slugParamSchema>;

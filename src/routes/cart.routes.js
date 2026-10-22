@@ -8,13 +8,13 @@ import {
 } from "../controllers/cart.controllers.js";
 import { requireAuth } from "../middlewares/auth.middleware.ts";
 import { idempotency } from "../middlewares/idempotency.middleware.js";
-import { validate } from "../middlewares/validate.middleware.js";
-import { idParamSchema } from "../validators/common.validators.js";
-import { cartQuerySchema } from "../validators/coupon.validators.js";
+import { validate } from "../middlewares/validate.middleware.ts";
+import { idParamSchema } from "../validators/common.validators.ts";
+import { cartQuerySchema } from "../validators/coupon.validators.ts";
 import {
   addCartItemSchema,
   updateCartItemSchema
-} from "../validators/cart.validators.js";
+} from "../validators/cart.validators.ts";
 
 const router = Router();
 

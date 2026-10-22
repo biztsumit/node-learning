@@ -1,12 +1,17 @@
-import { AppError } from "../utils/app-error.ts";
+import type { NextFunction, Request, Response } from "express";
+import type { z } from "zod";
+import { AppError, type FieldError } from "../utils/app-error.ts";
+
+// Which parts of the request can be checked, and with which zod schema
+type Schemas = Partial<Record<"body" | "query" | "params", z.ZodType>>;
 
 // Checks parts of the request against zod schemas before the controller runs.
 // Usage: validate({ params: idParamSchema, body: productSchema, query: listQuerySchema })
-export const validate = (schemas) => (req, res, next) => {
+export const validate = (schemas: Schemas) => (req: Request, res: Response, next: NextFunction): void => {
 
-  const errors = [];
+  const errors: FieldError[] = [];
 
-  for (const [source, schema] of Object.entries(schemas)) {
+  for (const [source, schema] of Object.entries(schemas) as Array<[keyof Schemas, z.ZodType]>) {
     const result = schema.safeParse(req[source] ?? {});
 
     if (result.success) {

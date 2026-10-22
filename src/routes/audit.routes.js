@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { getAuditLog } from "../controllers/audit.controllers.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.ts";
-import { validate } from "../middlewares/validate.middleware.js";
-import { auditLogQuerySchema } from "../validators/audit.validators.js";
+import { validate } from "../middlewares/validate.middleware.ts";
+import { auditLogQuerySchema } from "../validators/audit.validators.ts";
 
 const router = Router();
 

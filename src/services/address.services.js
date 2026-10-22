@@ -1,7 +1,7 @@
 import pool from "../config/db.js";
 import { withTransaction } from "../db/transaction.ts";
 import { AppError } from "../utils/app-error.ts";
-import { postalCodeProblem } from "../validators/address.validators.js";
+import { postalCodeProblem } from "../validators/address.validators.ts";
 
 const ADDRESS_COLUMNS = `
   id, label, full_name, phone, line1, line2, city, state, postal_code, country, is_default

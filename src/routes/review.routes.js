@@ -8,13 +8,13 @@ import {
 } from "../controllers/review.controllers.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.ts";
 import { clearCatalogCacheOnWrite } from "../middlewares/cache.middleware.js";
-import { validate } from "../middlewares/validate.middleware.js";
-import { idParamSchema } from "../validators/common.validators.js";
+import { validate } from "../middlewares/validate.middleware.ts";
+import { idParamSchema } from "../validators/common.validators.ts";
 import {
   createReviewSchema,
   updateReviewSchema,
   reviewListQuerySchema
-} from "../validators/review.validators.js";
+} from "../validators/review.validators.ts";
 
 // Mounted at /products/:id/reviews. mergeParams lets this router see :id from the parent path.
 export const productReviewRoutes = Router({ mergeParams: true });

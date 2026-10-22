@@ -11,3 +11,7 @@ export const productImageSchema = z.object({
     })
     .nullable()
 });
+
+// The TypeScript types of the CHECKED data (after trimming, defaults, coercion...).
+// Services use these, so the shape is written once: in the schema.
+export type ProductImage = z.infer<typeof productImageSchema>;

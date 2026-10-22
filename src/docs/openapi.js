@@ -3,20 +3,20 @@
 // Request bodies and query strings are generated FROM THE SAME ZOD SCHEMAS the routes use
 // to validate, so the docs can't drift away from what the API really accepts.
 import { z } from "zod";
-import { MAX_QUANTITY_PER_ITEM, addCartItemSchema, updateCartItemSchema } from "../validators/cart.validators.js";
-import { registerSchema, loginSchema, updateProfileSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, verifyEmailSchema } from "../validators/auth.validators.js";
-import { categorySchema } from "../validators/category.validators.js";
-import { productSchema, productUpdateSchema, productListQuerySchema } from "../validators/product.validators.js";
-import { createVariantSchema, updateVariantSchema } from "../validators/variant.validators.js";
-import { createAddressSchema, updateAddressSchema } from "../validators/address.validators.js";
-import { checkoutSchema, orderListQuerySchema, adminOrderListQuerySchema, updateOrderStatusSchema, orderNumberParamSchema } from "../validators/order.validators.js";
-import { verifyPaymentSchema } from "../validators/payment.validators.js";
-import { roleSchema, auditLogQuerySchema } from "../validators/audit.validators.js";
-import { summaryQuerySchema, revenueQuerySchema, topProductsQuerySchema, customersQuerySchema } from "../validators/report.validators.js";
-import { stockAdjustmentSchema, stockMovementListQuerySchema } from "../validators/stock.validators.js";
-import { cartQuerySchema, couponListQuerySchema, createCouponSchema, updateCouponSchema } from "../validators/coupon.validators.js";
-import { productImageSchema } from "../validators/upload.validators.js";
-import { createReviewSchema, updateReviewSchema, reviewListQuerySchema } from "../validators/review.validators.js";
+import { MAX_QUANTITY_PER_ITEM, addCartItemSchema, updateCartItemSchema } from "../validators/cart.validators.ts";
+import { registerSchema, loginSchema, updateProfileSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, verifyEmailSchema } from "../validators/auth.validators.ts";
+import { categorySchema } from "../validators/category.validators.ts";
+import { productSchema, productUpdateSchema, productListQuerySchema } from "../validators/product.validators.ts";
+import { createVariantSchema, updateVariantSchema } from "../validators/variant.validators.ts";
+import { createAddressSchema, updateAddressSchema } from "../validators/address.validators.ts";
+import { checkoutSchema, orderListQuerySchema, adminOrderListQuerySchema, updateOrderStatusSchema, orderNumberParamSchema } from "../validators/order.validators.ts";
+import { verifyPaymentSchema } from "../validators/payment.validators.ts";
+import { roleSchema, auditLogQuerySchema } from "../validators/audit.validators.ts";
+import { summaryQuerySchema, revenueQuerySchema, topProductsQuerySchema, customersQuerySchema } from "../validators/report.validators.ts";
+import { stockAdjustmentSchema, stockMovementListQuerySchema } from "../validators/stock.validators.ts";
+import { cartQuerySchema, couponListQuerySchema, createCouponSchema, updateCouponSchema } from "../validators/coupon.validators.ts";
+import { productImageSchema } from "../validators/upload.validators.ts";
+import { createReviewSchema, updateReviewSchema, reviewListQuerySchema } from "../validators/review.validators.ts";
 import { ORDER_STATUSES } from "../utils/order-status.ts";
 
 // Every id in this API is a UUID (time-ordered UUIDv7)

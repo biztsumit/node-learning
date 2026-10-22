@@ -1,13 +1,13 @@
 import { z } from "zod";
 
-const requiredText = (label, max) => z
+const requiredText = (label: string, max: number) => z
   .string({ error: `${label} is required` })
   .trim()
   .min(1, { error: `${label} is required` })
   .max(max, { error: `${label} must be at most ${max} characters` });
 
 // Optional text: "" or null both mean "not given" and are stored as NULL
-const optionalText = (label, max) => z
+const optionalText = (label: string, max: number) => z
   .string({ error: `${label} must be text` })
   .trim()
   .max(max, { error: `${label} must be at most ${max} characters` })
@@ -36,14 +36,14 @@ const addressFields = {
 
 // Indian PIN codes are exactly 6 digits. Returns an error message, or null if it's fine.
 // Shared with address.services.js, which checks PATCHes against the address's saved country.
-export const postalCodeProblem = (country, postalCode) => {
+export const postalCodeProblem = (country: string | undefined, postalCode: string): string | null => {
   if (country === "IN" && !/^\d{6}$/.test(postalCode)) {
     return "postalCode must be a 6-digit PIN code for India";
   }
   return null;
 };
 
-const checkPostalCode = (address, ctx) => {
+const checkPostalCode = (address: { country?: string; postalCode: string }, ctx: z.RefinementCtx) => {
   const problem = postalCodeProblem(address.country, address.postalCode);
   if (problem) {
     ctx.addIssue({ code: "custom", path: ["postalCode"], message: problem });
@@ -67,3 +67,8 @@ export const updateAddressSchema = z
   .object(addressFields)
   .partial()
   .refine((fields) => Object.keys(fields).length > 0, { error: "Send at least one field to update" });
+
+// The TypeScript types of the CHECKED data (after trimming, defaults, coercion...).
+// Services use these, so the shape is written once: in the schema.
+export type CreateAddress = z.infer<typeof createAddressSchema>;
+export type UpdateAddress = z.infer<typeof updateAddressSchema>;

@@ -1,6 +1,6 @@
 // Usage: npm run make-admin -- someone@example.com
 import pool from "../config/db.js";
-import { updateUserRole } from "../services/user.services.js";
+import { updateUserRole } from "../services/user.services.ts";
 import { runWithContext } from "../context/request-context.ts";
 
 const email = process.argv[2]?.trim().toLowerCase();

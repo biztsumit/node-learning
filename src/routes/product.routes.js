@@ -11,12 +11,12 @@ import { setImage } from "../controllers/upload.controllers.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.ts";
 import { clearCatalogCacheOnWrite } from "../middlewares/cache.middleware.js";
 import { requireUploadsEnabled } from "../middlewares/uploads.middleware.js";
-import { validate } from "../middlewares/validate.middleware.js";
-import { idParamSchema, slugParamSchema } from "../validators/common.validators.js";
-import { productSchema, productUpdateSchema, productListQuerySchema } from "../validators/product.validators.js";
-import { createVariantSchema, updateVariantSchema, variantParamsSchema } from "../validators/variant.validators.js";
+import { validate } from "../middlewares/validate.middleware.ts";
+import { idParamSchema, slugParamSchema } from "../validators/common.validators.ts";
+import { productSchema, productUpdateSchema, productListQuerySchema } from "../validators/product.validators.ts";
+import { createVariantSchema, updateVariantSchema, variantParamsSchema } from "../validators/variant.validators.ts";
 import { getVariants, addVariant, editVariant, removeVariant } from "../controllers/variant.controllers.js";
-import { productImageSchema } from "../validators/upload.validators.js";
+import { productImageSchema } from "../validators/upload.validators.ts";
 import { productReviewRoutes } from "./review.routes.js";
 
 const router = Router();

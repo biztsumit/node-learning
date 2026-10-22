@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { MAX_DB_INTEGER, paginationFields } from "./common.validators.js";
+import { MAX_DB_INTEGER, paginationFields } from "./common.validators.ts";
 
 // "welcome10 " → "WELCOME10". Letters, digits, - and _ only, so codes are easy to type and read out.
-const codeSchema = (label) => z
+const codeSchema = (label: string) => z
   .string({ error: `${label} is required` })
   .trim()
   .toUpperCase()
@@ -10,14 +10,14 @@ const codeSchema = (label) => z
 
 export const couponCodeSchema = codeSchema("couponCode");
 
-const amount = (label, { min = 0 } = {}) => z
+const amount = (label: string, { min = 0 }: { min?: number } = {}) => z
   .number({ error: `${label} must be a number` })
   .int({ error: `${label} must be a whole number` })
   .min(min, { error: `${label} must be at least ${min}` })
   .max(MAX_DB_INTEGER, { error: `${label} is too large` });
 
 // A date and time with its time zone: "2026-12-31T23:59:59+05:30" or "...Z"
-const dateTime = (label) => z
+const dateTime = (label: string) => z
   .iso.datetime({ offset: true, error: `${label} must be a date-time like 2026-12-31T23:59:59+05:30` })
   .transform((value) => new Date(value));
 
@@ -64,3 +64,11 @@ export const couponListQuerySchema = z.object({ ...paginationFields });
 export const cartQuerySchema = z.object({
   coupon: couponCodeSchema.optional()
 });
+
+// The TypeScript types of the CHECKED data (after trimming, defaults, coercion...).
+// Services use these, so the shape is written once: in the schema.
+export type CouponCode = z.infer<typeof couponCodeSchema>;
+export type CreateCoupon = z.infer<typeof createCouponSchema>;
+export type UpdateCoupon = z.infer<typeof updateCouponSchema>;
+export type CouponListQuery = z.infer<typeof couponListQuerySchema>;
+export type CartQuery = z.infer<typeof cartQuerySchema>;

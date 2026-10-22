@@ -8,9 +8,9 @@ import {
 } from "../controllers/category.controllers.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.ts";
 import { clearCatalogCacheOnWrite } from "../middlewares/cache.middleware.js";
-import { validate } from "../middlewares/validate.middleware.js";
-import { idParamSchema } from "../validators/common.validators.js";
-import { categorySchema } from "../validators/category.validators.js";
+import { validate } from "../middlewares/validate.middleware.ts";
+import { idParamSchema } from "../validators/common.validators.ts";
+import { categorySchema } from "../validators/category.validators.ts";
 
 const router = Router();
 

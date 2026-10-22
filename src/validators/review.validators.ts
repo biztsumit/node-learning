@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { paginationFields } from "./common.validators.js";
+import { paginationFields } from "./common.validators.ts";
 
 const ratingSchema = z
   .number({ error: "rating must be a number" })
@@ -34,3 +34,9 @@ export const reviewListQuerySchema = z.object({
     .default("newest"),
   ...paginationFields
 });
+
+// The TypeScript types of the CHECKED data (after trimming, defaults, coercion...).
+// Services use these, so the shape is written once: in the schema.
+export type CreateReview = z.infer<typeof createReviewSchema>;
+export type UpdateReview = z.infer<typeof updateReviewSchema>;
+export type ReviewListQuery = z.infer<typeof reviewListQuerySchema>;

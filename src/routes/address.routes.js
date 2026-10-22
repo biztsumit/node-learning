@@ -6,9 +6,9 @@ import {
   removeAddress
 } from "../controllers/address.controllers.js";
 import { requireAuth } from "../middlewares/auth.middleware.ts";
-import { validate } from "../middlewares/validate.middleware.js";
-import { idParamSchema } from "../validators/common.validators.js";
-import { createAddressSchema, updateAddressSchema } from "../validators/address.validators.js";
+import { validate } from "../middlewares/validate.middleware.ts";
+import { idParamSchema } from "../validators/common.validators.ts";
+import { createAddressSchema, updateAddressSchema } from "../validators/address.validators.ts";
 
 const router = Router();
 

@@ -1,8 +1,10 @@
 // Reading the audit log (it's written by database triggers, see migration 026)
 import pool from "../config/db.js";
-import { pagedQuery, timestampKey } from "../utils/cursor.ts";
+import { pagedQuery, timestampKey, type Pagination, type Sort } from "../utils/cursor.ts";
+import type { AuditLogQuery } from "../validators/audit.validators.ts";
 
-const AUDIT_SORT = {
+// ": Sort" checks it: direction must be "asc" or "desc", and each key's type one we can validate
+const AUDIT_SORT: Sort = {
   name: "audit",
   direction: "desc",
   keys: [
@@ -11,7 +13,33 @@ const AUDIT_SORT = {
   ]
 };
 
-const toEntry = (row) => ({
+type AuditRow = {
+  id: string;
+  table_name: string;
+  record_id: string;
+  action: "insert" | "update" | "delete";
+  changes: Record<string, unknown>;   // JSONB arrives already parsed
+  actor_id: string | null;
+  actor_name: string | null;
+  actor_email: string | null;
+  source: string;
+  request_id: string | null;
+  created_at: Date;
+};
+
+export type AuditEntry = {
+  id: string;
+  table: string;
+  recordId: string;
+  action: AuditRow["action"];
+  changes: Record<string, unknown>;
+  actor: { id: string; name: string | null; email: string | null } | null;
+  source: string;
+  requestId: string | null;
+  createdAt: Date;
+};
+
+const toEntry = (row: AuditRow): AuditEntry => ({
   id: row.id,
   table: row.table_name,
   recordId: row.record_id,
@@ -26,10 +54,12 @@ const toEntry = (row) => ({
 });
 
 // GET /admin/audit-log, newest first
-export const listAuditLog = async ({ table, recordId, actorId, action, page, cursor, limit }) => {
-  const conditions = [];
-  const values = [];
-  const addValue = (value) => {
+export const listAuditLog = async (
+  { table, recordId, actorId, action, page, cursor, limit }: AuditLogQuery
+): Promise<{ entries: AuditEntry[]; pagination: Pagination }> => {
+  const conditions: string[] = [];
+  const values: unknown[] = [];
+  const addValue = (value: unknown): string => {
     values.push(value);
     return `$${values.length}`;
   };
@@ -54,5 +84,6 @@ export const listAuditLog = async ({ table, recordId, actorId, action, page, cur
     conditions, values, addValue, sort: AUDIT_SORT, page, cursor, limit
   });
 
-  return { entries: rows.map(toEntry), pagination };
+  // pagedQuery can't know the columns of every query it runs, so we say what these rows are
+  return { entries: (rows as AuditRow[]).map(toEntry), pagination };
 };

@@ -5,7 +5,7 @@ import { deleteImage } from "../services/cloudinary.client.js";
 import { buildAuthEmail } from "../emails/auth-emails.js";
 import { buildOrderEmail } from "../emails/order-emails.js";
 import { deleteDeadTokens } from "../services/auth-token.services.js";
-import { findUserById } from "../services/user.services.js";
+import { findUserById } from "../services/user.services.ts";
 import { sendEmail } from "../emails/transport.js";
 import { expireUnpaidOrders, getOrderById } from "../services/order.services.js";
 import { retryPendingRefunds } from "../services/refund.services.js";

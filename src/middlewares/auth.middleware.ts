@@ -2,9 +2,9 @@ import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { env } from "../config/env.ts";
-import { getAuthState } from "../services/user.services.js";
+import { getAuthState } from "../services/user.services.ts";
 import { AppError } from "../utils/app-error.ts";
-import { idSchema } from "../validators/common.validators.js";
+import { idSchema } from "../validators/common.validators.ts";
 import { setActor } from "../context/request-context.ts";
 import type { Role } from "../types/express.d.ts";
 

@@ -1,4 +1,4 @@
-import * as wishlistService from "../services/wishlist.services.js";
+import * as wishlistService from "../services/wishlist.services.ts";
 import { AppError } from "../utils/app-error.ts";
 
 const sendWishlist = async (res, userId) => {

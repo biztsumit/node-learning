@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { getStockMovements, addStockMovement } from "../controllers/stock.controllers.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.ts";
-import { validate } from "../middlewares/validate.middleware.js";
-import { stockAdjustmentSchema, stockMovementListQuerySchema } from "../validators/stock.validators.js";
+import { validate } from "../middlewares/validate.middleware.ts";
+import { stockAdjustmentSchema, stockMovementListQuerySchema } from "../validators/stock.validators.ts";
 
 const router = Router();
 

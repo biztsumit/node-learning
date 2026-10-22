@@ -7,13 +7,13 @@ import {
   refreshReports
 } from "../controllers/report.controllers.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.middleware.ts";
-import { validate } from "../middlewares/validate.middleware.js";
+import { validate } from "../middlewares/validate.middleware.ts";
 import {
   summaryQuerySchema,
   revenueQuerySchema,
   topProductsQuerySchema,
   customersQuerySchema
-} from "../validators/report.validators.js";
+} from "../validators/report.validators.ts";
 
 const router = Router();
 
