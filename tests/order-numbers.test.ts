@@ -4,7 +4,7 @@ import { orderNumbers, ORDER_NUMBER_ALPHABET } from "../src/utils/order-number.t
 import {
   api, pool, resetDatabase, closeDatabase,
   createUser, createProduct, createAddress, placeOrder
-} from "./helpers.js";
+} from "./helpers.ts";
 
 beforeEach(resetDatabase);
 after(closeDatabase);

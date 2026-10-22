@@ -4,15 +4,15 @@ import { env } from "../src/config/env.ts";
 import { expireUnpaidOrders } from "../src/services/order.services.ts";
 import {
   api, pool, resetDatabase, closeDatabase, warmUpPool, hmac,
-  createUser, createProduct, createAddress, placeOrder, setOrderStatus, stockOf
-} from "./helpers.js";
+  createUser, createProduct, createAddress, placeOrder, setOrderStatus, stockOf, bodyText, requiredEnv
+} from "./helpers.ts";
 
 // Pretend to be Razorpay (only needed for the "paid after expiry" test)
 const realFetch = globalThis.fetch;
 before(() => {
   globalThis.fetch = async (url, options) => {
     if (!String(url).startsWith("https://api.razorpay.com/")) return realFetch(url, options);
-    const { amount, currency } = JSON.parse(options.body);
+    const { amount, currency } = JSON.parse(bodyText(options));
     return new Response(JSON.stringify({ id: `order_TEST${Date.now()}${Math.random()}`, amount, currency, status: "created" }));
   };
 });
@@ -49,7 +49,8 @@ describe("expiring unpaid orders", () => {
 
   it("tells the customer when a pending order must be paid by", async () => {
     const { order } = await pendingOrder();
-    const minutesLeft = (new Date(order.expiresAt) - new Date(order.createdAt)) / 60000;
+    // .getTime(): TypeScript doesn't do arithmetic on Date objects, only on numbers
+    const minutesLeft = (new Date(order.expiresAt).getTime() - new Date(order.createdAt).getTime()) / 60000;
     assert.equal(minutesLeft, TIMEOUT);
   });
 
@@ -83,7 +84,7 @@ describe("expiring unpaid orders", () => {
 
   it("is safe when several servers run it at the same moment", async () => {
     const lamp = await createProduct({ name: "Lamp", stock: 50 });
-    const orderIds = [];
+    const orderIds: string[] = [];
     for (let i = 0; i < 6; i++) {
       const user = await createUser();
       await createAddress(user);
@@ -123,7 +124,7 @@ describe("expiring unpaid orders", () => {
     const res = await api().post(`/orders/${order.id}/payment/verify`).set(user.auth).send({
       razorpayOrderId: start.razorpayOrderId,
       razorpayPaymentId,
-      razorpaySignature: hmac(process.env.RAZORPAY_KEY_SECRET, `${start.razorpayOrderId}|${razorpayPaymentId}`)
+      razorpaySignature: hmac(requiredEnv("RAZORPAY_KEY_SECRET"), `${start.razorpayOrderId}|${razorpayPaymentId}`)
     });
 
     assert.equal(res.status, 409);

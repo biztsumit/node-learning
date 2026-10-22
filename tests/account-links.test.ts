@@ -2,7 +2,7 @@ import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { sentEmails } from "../src/emails/transport.ts";
 import { hashToken } from "../src/services/auth-token.services.ts";
-import { api, pool, resetDatabase, closeDatabase, warmUpPool, createUser } from "./helpers.js";
+import { api, pool, resetDatabase, closeDatabase, warmUpPool, createUser } from "./helpers.ts";
 
 beforeEach(async () => {
   await resetDatabase();
@@ -14,7 +14,11 @@ after(closeDatabase);
 const tokenFromEmail = (subject, to) => {
   const email = sentEmails.findLast((e) => e.subject === subject && (!to || e.to === to));
   assert.ok(email, `no "${subject}" email`);
-  return new URL(email.text.match(/https?:\/\/\S+/)[0]).searchParams.get("token");
+  const link = email.text.match(/https?:\/\/\S+/)?.[0];
+  assert.ok(link, "the email has no link");
+  const token = new URL(link).searchParams.get("token");
+  assert.ok(token, "the link has no token");
+  return token;
 };
 const resetToken = (to) => tokenFromEmail("Reset your password", to);
 const verifyToken = (to) => tokenFromEmail("Please confirm your email address", to);
@@ -34,7 +38,7 @@ describe("forgot password", () => {
 
     assert.equal(known.body.message, unknown.body.message);
     assert.equal(sentEmails.length, 1);
-    assert.equal(sentEmails[0].to, user.email);
+    assert.equal(sentEmails[0]?.to, user.email);
   });
 
   it("resets the password with the emailed link, and logs out every device", async () => {
@@ -43,7 +47,7 @@ describe("forgot password", () => {
     const token = resetToken(user.email);
 
     // The link points at the reset page, with a long random token
-    assert.match(sentEmails.at(-1).text, /\/reset-password\?token=[A-Za-z0-9_-]{43}/);
+    assert.match(sentEmails.at(-1)?.text ?? "", /\/reset-password\?token=[A-Za-z0-9_-]{43}/);
 
     await reset(token, "brand-new-pass").expect(200);
 

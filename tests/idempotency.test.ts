@@ -5,7 +5,7 @@ import { deleteOldIdempotencyKeys } from "../src/middlewares/idempotency.middlew
 import {
   api, pool, resetDatabase, closeDatabase, warmUpPool,
   createUser, createProduct, createAddress
-} from "./helpers.js";
+} from "./helpers.ts";
 
 beforeEach(resetDatabase);
 after(closeDatabase);

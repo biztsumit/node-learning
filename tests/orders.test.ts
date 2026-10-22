@@ -2,8 +2,8 @@ import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import {
   api, pool, resetDatabase, closeDatabase, warmUpPool,
-  createUser, createProduct, createAddress, placeOrder, setOrderStatus, stockOf, setVariantFields
-} from "./helpers.js";
+  createUser, createProduct, createAddress, placeOrder, setOrderStatus, stockOf, setVariantFields, type TestUser
+} from "./helpers.ts";
 
 beforeEach(resetDatabase);
 after(closeDatabase);
@@ -89,7 +89,7 @@ describe("checkout", () => {
   // and the test would pass even with the row lock removed (a "flaky" test)
   it("never oversells when many customers check out at the same moment", async () => {
     const vase = await createProduct({ stock: 2 });
-    const shoppers = [];
+    const shoppers: TestUser[] = [];
     for (let i = 0; i < 15; i++) {
       const shopper = await createUser();
       await createAddress(shopper);

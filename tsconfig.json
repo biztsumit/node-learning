@@ -1,9 +1,8 @@
 // TypeScript settings. We never compile to JavaScript: Node 24 runs .ts files itself by
 // stripping the types out. tsc is only the CHECKER (npm run typecheck), run in CI.
 //
-// The migration is gradual: .ts files are checked strictly; .js files still run as before
-// and aren't checked (checkJs: false) until they're converted. TypeScript still reads them,
-// so a .ts file calling into a .js one gets whatever types can be inferred from it.
+// The app was moved from JavaScript one layer at a time (allowJs let both live side by side).
+// Now that every file is .ts, allowJs is off: a stray .js file can't slip in unchecked.
 {
   "compilerOptions": {
     // Node's own module rules: ES modules, imports need their file extension
@@ -20,13 +19,13 @@
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
 
-    "allowJs": true,
-    "checkJs": false,
+    "allowJs": false,
 
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["src", "tests"]
+  // The app. The tests have their own settings (tests/tsconfig.json), checked separately.
+  "include": ["src"]
 }

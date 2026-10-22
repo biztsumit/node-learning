@@ -1,7 +1,7 @@
 // Things every response should get: security headers, CORS rules, request ids, clean errors
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
-import { api, closeDatabase } from "./helpers.js";
+import { api, closeDatabase } from "./helpers.ts";
 
 after(closeDatabase);
 
@@ -25,7 +25,7 @@ describe("every response", () => {
 
   it("has a request id, and reuses a safe one sent by the client", async () => {
     const generated = await api().get("/");
-    assert.match(generated.headers["x-request-id"], /^[0-9a-f-]{36}$/);
+    assert.match(String(generated.headers["x-request-id"]), /^[0-9a-f-]{36}$/);
 
     const passed = await api().get("/").set("X-Request-Id", "my-trace-1");
     assert.equal(passed.headers["x-request-id"], "my-trace-1");

@@ -2,8 +2,8 @@ import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import {
   api, pool, resetDatabase, closeDatabase, warmUpPool,
-  createUser, createProduct, createAddress, placeOrder, stockOf
-} from "./helpers.js";
+  createUser, createProduct, createAddress, placeOrder, stockOf, type TestUser
+} from "./helpers.ts";
 
 beforeEach(resetDatabase);
 after(closeDatabase);
@@ -123,7 +123,7 @@ describe("stock ledger", () => {
   it("stays exact when sales and deliveries happen at the same moment", async () => {
     const admin = await createUser({ role: "admin" });
     const mug = await createProduct({ stock: 10 });   // the trigger logs this as "initial": +10
-    const shoppers = [];
+    const shoppers: TestUser[] = [];
     for (let i = 0; i < 6; i++) {
       const shopper = await createUser();
       await createAddress(shopper);

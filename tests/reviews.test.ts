@@ -2,8 +2,8 @@ import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import {
   api, pool, resetDatabase, closeDatabase, warmUpPool,
-  createUser, createProduct, createAddress, placeOrder, setOrderStatus
-} from "./helpers.js";
+  createUser, createProduct, createAddress, placeOrder, setOrderStatus, type TestUser
+} from "./helpers.ts";
 
 beforeEach(resetDatabase);
 after(closeDatabase);
@@ -59,7 +59,7 @@ describe("reviews", () => {
   it("stays correct when many reviews arrive at the same moment", async () => {
     const lamp = await createProduct();
     const ratings = [5, 1, 4, 2, 5, 3];
-    const customers = [];
+    const customers: TestUser[] = [];
     for (const _ of ratings) {
       customers.push(await customerWhoReceived(lamp));
     }

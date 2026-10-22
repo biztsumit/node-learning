@@ -3,7 +3,7 @@ import { describe, it, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { catalogCache } from "../src/cache/catalog-cache.ts";
 import { startCacheInvalidation, stopCacheInvalidation } from "../src/cache/invalidation.ts";
-import { api, pool, resetDatabase, closeDatabase, createUser, createProduct, setVariantFields } from "./helpers.js";
+import { api, pool, resetDatabase, closeDatabase, createUser, createProduct, setVariantFields } from "./helpers.ts";
 
 before(async () => {
   catalogCache.configure({ ttlSeconds: 60 });

@@ -2,15 +2,15 @@ import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import {
   api, pool, resetDatabase, closeDatabase, warmUpPool,
-  createUser, createProduct, createAddress
-} from "./helpers.js";
+  createUser, createProduct, createAddress, type TestUser
+} from "./helpers.ts";
 import { calculateDiscount } from "../src/services/coupon.services.ts";
 import { buildOrderEmail } from "../src/emails/order-emails.ts";
 
 beforeEach(resetDatabase);
 after(closeDatabase);
 
-const createCoupon = async (admin, fields) =>
+const createCoupon = async (admin: TestUser, fields: Record<string, unknown> = {}) =>
   (await api().post("/admin/coupons").set(admin.auth)
     .send({ code: "WELCOME10", discountType: "percent", discountValue: 10, ...fields })
     .expect(201)).body.data;
@@ -145,7 +145,7 @@ describe("using a coupon", () => {
   it("is never used more than its limit, even when many customers check out at once", async () => {
     const admin = await createUser({ role: "admin" });
     const coupon = await createCoupon(admin, { code: "FIRST3", usageLimit: 3 });
-    const shoppers = [];
+    const shoppers: TestUser[] = [];
     for (let i = 0; i < 12; i++) {
       shoppers.push(await shopper());
     }

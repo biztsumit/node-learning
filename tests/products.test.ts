@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
-import { api, pool, resetDatabase, closeDatabase, createUser, createProduct } from "./helpers.js";
+import { api, pool, resetDatabase, closeDatabase, createUser, createProduct } from "./helpers.ts";
 
 beforeEach(resetDatabase);
 after(closeDatabase);

@@ -3,8 +3,9 @@ import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import SwaggerParser from "@apidevtools/swagger-parser";
 import app from "../src/app.ts";
+import type { OpenAPI } from "openapi-types";
 import { openApiDocument } from "../src/docs/openapi.ts";
-import { api, closeDatabase } from "./helpers.js";
+import { api, closeDatabase } from "./helpers.ts";
 
 after(closeDatabase);
 
@@ -26,7 +27,9 @@ const countRoutes = (stack) =>
 describe("API documentation", () => {
 
   it("is a valid OpenAPI document", async () => {
-    await SwaggerParser.validate(structuredClone(openApiDocument));
+    // Our document is a plain object to TypeScript, not its "OpenAPI document" type, so a cast:
+    // this test IS the check that it's a valid OpenAPI document (the parser validates it fully)
+    await SwaggerParser.validate(structuredClone(openApiDocument) as unknown as OpenAPI.Document);
   });
 
   it("is served as JSON and as an interactive page", async () => {

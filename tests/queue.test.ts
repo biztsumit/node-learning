@@ -7,19 +7,19 @@ import { sentEmails } from "../src/emails/transport.ts";
 import { withTransaction } from "../src/db/transaction.ts";
 import {
   api, pool, resetDatabase, closeDatabase,
-  createUser, createProduct, createAddress, placeOrder, setVariantFields
-} from "./helpers.js";
+  createUser, createProduct, createAddress, placeOrder, setVariantFields, bodyText
+} from "./helpers.ts";
 
 // Fake Cloudinary delete API that can fail on demand
 const realFetch = globalThis.fetch;
-let deleteCalls = [];
+let deleteCalls: Array<string | null> = [];
 let failNextDeletes = 0;
 
 let boss;
 before(async () => {
   globalThis.fetch = async (url, options) => {
     if (!String(url).includes("api.cloudinary.com")) return realFetch(url, options);
-    const publicId = new URLSearchParams(options.body).get("public_id");
+    const publicId = new URLSearchParams(bodyText(options)).get("public_id");
     deleteCalls.push(publicId);
     if (failNextDeletes > 0) {
       failNextDeletes--;
@@ -106,7 +106,8 @@ describe("job queue (pg-boss)", () => {
     const count = async () =>
       (await pool.query("SELECT COUNT(*)::int AS n FROM pgboss.job WHERE name = 'order-email'")).rows[0].n;
     const before = await count();
-    const job = { orderId: crypto.randomUUID(), type: "placed" };
+    // "as const": the type is exactly "placed" (an order email that exists), not any string
+    const job = { orderId: crypto.randomUUID(), type: "placed" as const };
 
     await assert.rejects(
       withTransaction(async (client) => {
@@ -151,7 +152,7 @@ describe("job queue (pg-boss)", () => {
     const order = (await placeOrder(user, [[lamp.id, 2]])).body.data;
     await pool.query("UPDATE orders SET created_at = NOW() - INTERVAL '30 days' WHERE id = $1", [order.id]);
 
-    await enqueue("maintenance");
+    await enqueue("maintenance", {});
     await waitFor(async () =>
       (await pool.query("SELECT status FROM orders WHERE id = $1", [order.id])).rows[0].status === "cancelled"
     );

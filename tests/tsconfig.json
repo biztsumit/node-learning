@@ -1,0 +1,13 @@
+// The tests: the same strict rules as the app (tsconfig.json), with one exception.
+//
+// noImplicitAny is off because API responses arrive as JSON, which supertest types as "any":
+// in res.body.data.map((p) => p.name), p can't have a type, and writing (p: any) dozens of
+// times would add noise and catch nothing. Everything else stays strict: calls into the app
+// are checked (wrong arguments, misspelled job names...), and so are values that might be missing.
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noImplicitAny": false
+  },
+  "include": [".", "../src"]
+}

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   api, pool, resetDatabase, closeDatabase,
   createUser, createProduct, createAddress, stockOf
-} from "./helpers.js";
+} from "./helpers.ts";
 import { buildOrderEmail } from "../src/emails/order-emails.ts";
 
 beforeEach(resetDatabase);

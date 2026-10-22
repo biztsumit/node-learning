@@ -3,12 +3,13 @@ import assert from "node:assert/strict";
 import { retryPendingRefunds } from "../src/services/refund.services.ts";
 import {
   api, pool, resetDatabase, closeDatabase, warmUpPool, hmac,
-  createUser, createProduct, createAddress, placeOrder
-} from "./helpers.js";
+  createUser, createProduct, createAddress, placeOrder, bodyText, requiredEnv
+} from "./helpers.ts";
 
 // ---------- A fake Razorpay that remembers the refunds it made ----------
 const realFetch = globalThis.fetch;
-let razorpayRefunds = [];          // refunds "at Razorpay"
+type FakeRefund = { id: string; payment_id: string | undefined; amount: number; receipt: string; status: string };
+let razorpayRefunds: FakeRefund[] = [];          // refunds "at Razorpay"
 let createCalls = 0;
 let mode = "ok";                   // "ok" | "down" | "lose-reply"
 let counter = 0;
@@ -21,7 +22,7 @@ before(() => {
     if (!u.startsWith("https://api.razorpay.com/")) return realFetch(url, options);
 
     if (u.endsWith("/orders")) {
-      const { amount, currency } = JSON.parse(options.body);
+      const { amount, currency } = JSON.parse(bodyText(options));
       return json({ id: `order_TEST${++counter}`, amount, currency, status: "created" });
     }
     const listMatch = u.match(/\/payments\/([^/]+)\/refunds$/);
@@ -33,7 +34,7 @@ before(() => {
     if (createMatch) {
       createCalls++;
       if (mode === "down") return json({ error: { description: "Service unavailable" } }, 503);
-      const { amount, receipt } = JSON.parse(options.body);
+      const { amount, receipt } = JSON.parse(bodyText(options));
       const refund = { id: `rfnd_TEST${++counter}`, payment_id: createMatch[1], amount, receipt, status: "pending" };
       razorpayRefunds.push(refund);
       // The refund happened at Razorpay, but the answer never reaches us
@@ -61,7 +62,7 @@ const sendWebhook = (event, payload) => {
   return api()
     .post("/webhooks/razorpay")
     .set("Content-Type", "application/json")
-    .set("x-razorpay-signature", hmac(process.env.RAZORPAY_WEBHOOK_SECRET, raw))
+    .set("x-razorpay-signature", hmac(requiredEnv("RAZORPAY_WEBHOOK_SECRET"), raw))
     .set("x-razorpay-event-id", `evt_${++counter}`)
     .send(raw);
 };
@@ -73,7 +74,7 @@ const browserConfirms = (user, orderId, razorpayOrderId, razorpayPaymentId) =>
   api().post(`/orders/${orderId}/payment/verify`).set(user.auth).send({
     razorpayOrderId,
     razorpayPaymentId,
-    razorpaySignature: hmac(process.env.RAZORPAY_KEY_SECRET, `${razorpayOrderId}|${razorpayPaymentId}`)
+    razorpaySignature: hmac(requiredEnv("RAZORPAY_KEY_SECRET"), `${razorpayOrderId}|${razorpayPaymentId}`)
   });
 
 // A customer whose ₹500 order (2 × ₹250) is paid
@@ -108,17 +109,19 @@ describe("automatic refunds", () => {
     const cancelled = await api().patch(`/admin/orders/${order.id}/status`).set(admin.auth).send({ status: "cancelled" }).expect(200);
 
     assert.equal(createCalls, 1);
-    assert.equal(razorpayRefunds[0].payment_id, paymentId);
-    assert.equal(razorpayRefunds[0].amount, 50000);                     // paise
+    const [sent] = razorpayRefunds;
+    assert.ok(sent, "a refund was sent to Razorpay");
+    assert.equal(sent.payment_id, paymentId);
+    assert.equal(sent.amount, 50000);                     // paise
     const [refund] = await refundRows();
-    assert.equal(razorpayRefunds[0].receipt, refund.id);                 // our id, visible in Razorpay
+    assert.equal(sent.receipt, refund.id);                 // our id, visible in Razorpay
     assert.deepEqual(
       { status: cancelled.body.data.refund.status, amount: cancelled.body.data.refund.amount },
       { status: "pending", amount: 500 }                                 // rupees, like totalAmount
     );
 
     // Razorpay tells us it's done
-    await sendWebhook("refund.processed", { refund: { entity: { ...razorpayRefunds[0], status: "processed" } } }).expect(200);
+    await sendWebhook("refund.processed", { refund: { entity: { ...sent, status: "processed" } } }).expect(200);
 
     assert.equal(await paymentStatus(paymentId), "refunded");
     const seenByCustomer = await api().get(`/orders/${order.id}`).set(user.auth).expect(200);
@@ -149,7 +152,7 @@ describe("automatic refunds", () => {
 
     assert.match(res.body.message, /being refunded/);
     assert.equal(createCalls, 1);
-    assert.equal(razorpayRefunds[0].amount, 30000);
+    assert.equal(razorpayRefunds[0]?.amount, 30000);
     assert.equal((await refundRows())[0].reason, "paid_after_cancellation");
   });
 
@@ -205,14 +208,15 @@ describe("automatic refunds", () => {
 
     assert.equal(createCalls, 1);                                         // no second refund
     assert.equal(razorpayRefunds.length, 1);
-    assert.equal((await refundRows())[0].provider_refund_id, razorpayRefunds[0].id);
+    assert.equal((await refundRows())[0].provider_refund_id, razorpayRefunds[0]?.id);
   });
 
   it("ignores webhooks that arrive out of order", async () => {
     const admin = await createUser({ role: "admin" });
     const { order } = await paidOrder();
     await api().patch(`/admin/orders/${order.id}/status`).set(admin.auth).send({ status: "cancelled" }).expect(200);
-    const entity = razorpayRefunds[0];
+    const [entity] = razorpayRefunds;
+    assert.ok(entity, "a refund was sent to Razorpay");
 
     await sendWebhook("refund.processed", { refund: { entity: { ...entity, status: "processed" } } }).expect(200);
     await sendWebhook("refund.created", { refund: { entity: { ...entity, status: "pending" } } }).expect(200);
@@ -225,7 +229,9 @@ describe("automatic refunds", () => {
     const { order, paymentId } = await paidOrder();
     await api().patch(`/admin/orders/${order.id}/status`).set(admin.auth).send({ status: "cancelled" }).expect(200);
 
-    await sendWebhook("refund.failed", { refund: { entity: { ...razorpayRefunds[0], status: "failed" } } }).expect(200);
+    const [failing] = razorpayRefunds;
+    assert.ok(failing, "a refund was sent to Razorpay");
+    await sendWebhook("refund.failed", { refund: { entity: { ...failing, status: "failed" } } }).expect(200);
 
     assert.equal((await refundRows())[0].status, "failed");
     assert.equal(await paymentStatus(paymentId), "paid");                 // money not back yet

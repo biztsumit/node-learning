@@ -2,8 +2,8 @@ import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import {
   api, pool, resetDatabase, closeDatabase, warmUpPool,
-  createUser, createProduct, createAddress, placeOrder
-} from "./helpers.js";
+  createUser, createProduct, createAddress, placeOrder, type TestProduct, type TestUser
+} from "./helpers.ts";
 import { runWithContext } from "../src/context/request-context.ts";
 import { expireUnpaidOrders } from "../src/services/order.services.ts";
 
@@ -81,22 +81,19 @@ describe("audit log", () => {
   });
 
   it("keeps each request's actor separate, even when they run at the same time", async () => {
-    const admins = [];
+    // Each admin edits their own product: kept together, so there's no "products[i] might not exist"
+    const pairs: Array<{ admin: TestUser; product: TestProduct }> = [];
     for (let i = 0; i < 6; i++) {
-      admins.push(await createUser({ role: "admin" }));
-    }
-    const products = [];
-    for (let i = 0; i < 6; i++) {
-      products.push(await createProduct({ price: 100 }));
+      pairs.push({ admin: await createUser({ role: "admin" }), product: await createProduct({ price: 100 }) });
     }
 
     await warmUpPool();
-    await Promise.all(admins.map((admin, i) =>
-      api().patch(`/products/${products[i].id}/variants/${products[i].variantId}`).set(admin.auth).send({ price: 200 + i }).expect(200)));
+    await Promise.all(pairs.map(({ admin, product }, i) =>
+      api().patch(`/products/${product.id}/variants/${product.variantId}`).set(admin.auth).send({ price: 200 + i }).expect(200)));
 
-    for (let i = 0; i < 6; i++) {
-      const update = (await entriesFor("product_variants", products[i].variantId)).find((e) => e.action === "update");
-      assert.equal(update.actor_id, admins[i].id, `change ${i} credited to the wrong admin`);
+    for (const [i, { admin, product }] of pairs.entries()) {
+      const update = (await entriesFor("product_variants", product.variantId)).find((e) => e.action === "update");
+      assert.equal(update?.actor_id, admin.id, `change ${i} credited to the wrong admin`);
     }
   });
 
@@ -148,7 +145,7 @@ describe("changing roles", () => {
     // One wins. The other is refused: either it's now the last admin (409),
     // or its sender was just demoted and isn't an admin any more (403)
     assert.equal(statuses[0], 200);
-    assert.ok([403, 409].includes(statuses[1]));
+    assert.ok([403, 409].includes(statuses[1] ?? 0));
     const { rows: [{ n }] } = await pool.query("SELECT COUNT(*)::int AS n FROM users WHERE role = 'admin'");
     assert.equal(n, 1);
   });

@@ -92,13 +92,7 @@ Ordered so each phase builds on the previous one. ⭐ = recommended next.
 ## Phase 12 — Engineering maturity
 
 - [ ] 12.1 Docker + docker-compose (app, PostgreSQL, migrations; no Redis needed) for one-command setup: files written, verified by the CI "docker" job
-- [ ] 12.2 TypeScript, gradually (Node 24 runs .ts directly; `npm run typecheck` in CI)
-  - [x] Foundation: settings, errors, order rules, cursors, request context, transactions, auth (+ typed `req.user`)
-  - [x] Validators (each exports its z.infer type) and the validate middleware
-  - [x] Services (all 19)
-  - [x] Controllers, routes and all middleware (`Checked<Params, Body, Query>` requests, `currentUser(req)`)
-  - [x] Jobs (typed per job name), emails, cache, config, db scripts, app/server: no .js left in src/
-  - [ ] Tests; finally `allowJs: false`
+- [x] 12.2 TypeScript, migrated gradually layer by layer (Node 24 runs .ts directly, no build step; `npm run typecheck` in CI checks the app strictly and the tests with tests/tsconfig.json; allowJs is off)
 - [ ] 12.3 Observability: error tracking (Sentry), metrics (`/metrics` for Prometheus), tracing (OpenTelemetry)
 - [ ] 12.4 Refresh tokens in httpOnly cookies; two-factor login for admins
 - [ ] 12.5 A staging environment that mirrors production

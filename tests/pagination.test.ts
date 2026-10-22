@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   api, pool, resetDatabase, closeDatabase,
   createUser, createProduct, createAddress, placeOrder
-} from "./helpers.js";
+} from "./helpers.ts";
 
 beforeEach(resetDatabase);
 after(closeDatabase);
@@ -11,8 +11,8 @@ after(closeDatabase);
 // Follows nextCursor from the first page to the last; returns every id seen, in order
 const walk = async (url, { limit = 2, auth = {} } = {}) => {
   const join = url.includes("?") ? "&" : "?";
-  const ids = [];
-  let cursor = null;
+  const ids: string[] = [];
+  let cursor: string | null = null;
   do {
     const res = await api().get(`${url}${join}limit=${limit}${cursor ? `&cursor=${cursor}` : ""}`).set(auth).expect(200);
     ids.push(...res.body.data.map((item) => item.id));

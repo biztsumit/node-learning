@@ -1,12 +1,12 @@
 import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { sentEmails } from "../src/emails/transport.ts";
-import { buildOrderEmail, escapeHtml, ORDER_EMAIL_TYPES } from "../src/emails/order-emails.ts";
+import { buildOrderEmail, escapeHtml, ORDER_EMAIL_TYPES, type OrderForEmail } from "../src/emails/order-emails.ts";
 import { expireUnpaidOrders, getOrderById } from "../src/services/order.services.ts";
 import {
   api, pool, resetDatabase, closeDatabase,
   createUser, createProduct, createAddress, placeOrder, setVariantFields
-} from "./helpers.js";
+} from "./helpers.ts";
 
 beforeEach(async () => {
   await resetDatabase();
@@ -33,6 +33,8 @@ describe("order emails", () => {
 
     assert.equal(orderEmails().length, 1);
     const [email] = orderEmails();
+    // assert.ok narrows: after it, TypeScript knows email isn't undefined
+    assert.ok(email);
     assert.equal(email.to, user.email);
     assert.equal(email.subject, `We've got your order ${order.orderNumber}`);
     assert.match(email.html, /Ceramic Mug × 2/);
@@ -70,12 +72,13 @@ describe("order emails", () => {
   it("explain why an order was cancelled", async () => {
     const byCustomer = await customerWithOrder();
     await api().post(`/orders/${byCustomer.order.id}/cancel`).set(byCustomer.user.auth).expect(200);
-    assert.match(orderEmails().at(-1).html, /You cancelled this order/);
+    assert.match(orderEmails().at(-1)?.html ?? "", /You cancelled this order/);
 
     const unpaid = await customerWithOrder();
     await pool.query("UPDATE orders SET created_at = NOW() - INTERVAL '30 days' WHERE id = $1", [unpaid.order.id]);
     await expireUnpaidOrders();
     const email = orderEmails().at(-1);
+    assert.ok(email);
     assert.equal(email.subject, `Order ${unpaid.order.orderNumber} cancelled`);
     assert.match(email.html, /didn't receive payment in time/);
   });
@@ -83,7 +86,9 @@ describe("order emails", () => {
   it("escape anything typed by people, so it can't inject HTML", async () => {
     const { order } = await customerWithOrder({ productName: `<img src=x onerror="alert(1)">` });
     await pool.query("UPDATE users SET name = '<b>Mallory</b>'");
-    const email = buildOrderEmail("paid", await getOrderById(order.id));
+    const full = await getOrderById(order.id);
+    assert.ok(full?.customer);
+    const email = buildOrderEmail("paid", { ...full, customer: full.customer });
 
     assert.doesNotMatch(email.html, /<img src=x/);
     assert.match(email.html, /&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/);
@@ -98,6 +103,7 @@ describe("order emails", () => {
     try {
       const { user, order } = await customerWithOrder();
       const email = orderEmails().find((e) => e.subject.includes("We've got your order"));
+      assert.ok(email);
       assert.equal(email.to, "developer@example.com");
       assert.equal(email.subject, `[to ${user.email}] We've got your order ${order.orderNumber}`);
     } finally {
@@ -112,7 +118,8 @@ describe("order emails", () => {
       customer: { name: "Arjun", email: "arjun@example.com" },
       shippingAddress: null,
       items: [{ productName: "Tee", quantity: 2, lineTotal: 1598 }]
-    };
+      // A made-up order with only the fields the emails read; the cast says "treat it as a full one"
+    } as unknown as OrderForEmail;
     for (const type of ORDER_EMAIL_TYPES) {
       const email = buildOrderEmail(type, order);
       assert.ok(email.subject.includes("ORD-7K3M9Q"), type);
@@ -120,6 +127,9 @@ describe("order emails", () => {
       assert.ok(email.text.length > 20, type);
     }
     assert.match(buildOrderEmail("cancelled", order).html, /₹1,598<\/strong> is being refunded/);
+    // On purpose: the type check would refuse this, so we check the run-time guard too.
+    // The directive below documents that, and fails the type check if "bogus" ever became valid.
+    // @ts-expect-error "bogus" is not an order email type
     assert.throws(() => buildOrderEmail("bogus", order), /Unknown order email type/);
   });
 });

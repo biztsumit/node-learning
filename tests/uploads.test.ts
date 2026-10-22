@@ -2,10 +2,10 @@ import crypto from "node:crypto";
 import { describe, it, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { v2 as cloudinary } from "cloudinary";
-import { api, resetDatabase, closeDatabase, createUser, createProduct } from "./helpers.js";
+import { api, resetDatabase, closeDatabase, createUser, createProduct, bodyText, requiredEnv } from "./helpers.ts";
 
-const CLOUD = process.env.CLOUDINARY_CLOUD_NAME;
-const SECRET = process.env.CLOUDINARY_API_SECRET;
+const CLOUD = requiredEnv("CLOUDINARY_CLOUD_NAME");
+const SECRET = requiredEnv("CLOUDINARY_API_SECRET");
 
 // What Cloudinary's secure_url looks like for an image in our product folder
 const ourImageUrl = (format = "jpg") =>
@@ -13,14 +13,14 @@ const ourImageUrl = (format = "jpg") =>
 
 // Pretend to be Cloudinary's delete API, and remember what we were asked to delete
 const realFetch = globalThis.fetch;
-let deleted = [];
+let deleted: Array<string | undefined> = [];
 let cloudinaryDown = false;
 before(() => {
   globalThis.fetch = async (url, options) => {
     if (!String(url).startsWith("https://api.cloudinary.com/")) {
       return realFetch(url, options);
     }
-    const form = new URLSearchParams(options.body);
+    const form = new URLSearchParams(bodyText(options));
     const { signature, api_key, ...signed } = Object.fromEntries(form);
     if (cloudinaryDown) {
       return new Response(JSON.stringify({ error: { message: "Service unavailable" } }), { status: 503 });
@@ -68,7 +68,7 @@ describe("upload permission (step 1)", () => {
     const { signature, api_key, ...signed } = fields;
     assert.equal(signature, cloudinary.utils.api_sign_request(signed, SECRET));
 
-    const minutesLeft = (new Date(expiresAt) - Date.now()) / 60000;
+    const minutesLeft = (new Date(expiresAt).getTime() - Date.now()) / 60000;
     assert.ok(minutesLeft > 55 && minutesLeft <= 60);
   });
 

@@ -2,11 +2,11 @@ import { describe, it, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import {
   api, pool, resetDatabase, closeDatabase,
-  createUser, createProduct, createAddress, placeOrder, hmac
-} from "./helpers.js";
+  createUser, createProduct, createAddress, placeOrder, hmac, bodyText, requiredEnv
+} from "./helpers.ts";
 
-const KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
-const WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET;
+const KEY_SECRET = requiredEnv("RAZORPAY_KEY_SECRET");
+const WEBHOOK_SECRET = requiredEnv("RAZORPAY_WEBHOOK_SECRET");
 
 // Pretend to be Razorpay's API. Supertest doesn't use fetch, so only the app's calls are caught.
 const realFetch = globalThis.fetch;
@@ -17,7 +17,7 @@ before(() => {
       return realFetch(url, options);
     }
     razorpayCalls++;
-    const { amount, currency } = JSON.parse(options.body);
+    const { amount, currency } = JSON.parse(bodyText(options));
     return new Response(JSON.stringify({ id: `order_TEST${razorpayCalls}`, amount, currency, status: "created" }));
   };
 });

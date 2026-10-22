@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
-import { api, pool, resetDatabase, closeDatabase, createUser } from "./helpers.js";
+import { api, pool, resetDatabase, closeDatabase, createUser } from "./helpers.ts";
 
 beforeEach(resetDatabase);
 after(closeDatabase);

@@ -13,10 +13,10 @@
     "make-admin": "node src/scripts/make-admin.ts",
     "migrate": "node src/db/migrate.ts",
     "seed": "node src/db/seed.ts",
-    "pretest": "node tests/setup-db.js",
-    "test": "node --import ./tests/setup-env.js --test --test-concurrency=1 \"tests/*.test.js\"",
+    "pretest": "node tests/setup-db.ts",
+    "test": "node --import ./tests/setup-env.ts --test --test-concurrency=1 \"tests/*.test.ts\"",
     "expire-orders": "node src/scripts/expire-orders.ts",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p . && tsc -p tests"
   },
   "dependencies": {
     "@ngrok/ngrok": "^1.7.0",
