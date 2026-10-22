@@ -1,5 +1,5 @@
 import * as cartService from "../services/cart.services.ts";
-import { previewCoupon } from "../services/coupon.services.js";
+import { previewCoupon } from "../services/coupon.services.ts";
 import { optionsLabel } from "../services/variant.services.ts";
 import { MAX_QUANTITY_PER_ITEM } from "../validators/cart.validators.ts";
 import { AppError } from "../utils/app-error.ts";

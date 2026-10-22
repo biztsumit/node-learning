@@ -1,4 +1,4 @@
-import * as couponService from "../services/coupon.services.js";
+import * as couponService from "../services/coupon.services.ts";
 import { AppError } from "../utils/app-error.ts";
 
 // GET /admin/coupons

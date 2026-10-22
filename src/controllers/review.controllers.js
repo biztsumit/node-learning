@@ -1,4 +1,4 @@
-import * as reviewService from "../services/review.services.js";
+import * as reviewService from "../services/review.services.ts";
 
 // GET /products/:id/reviews
 export const getReviews = async (req, res) => {

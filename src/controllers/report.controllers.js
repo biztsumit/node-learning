@@ -1,4 +1,4 @@
-import * as reportService from "../services/report.services.js";
+import * as reportService from "../services/report.services.ts";
 
 const send = (res, data) => {
   res.json({

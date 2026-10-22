@@ -10,7 +10,13 @@
 //   ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at)
 //                                          → 1 for each customer's first order, 2 for the next...
 import pool from "../config/db.js";
-import { REPORT_TIME_ZONE, addDays } from "../validators/report.validators.ts";
+import {
+  REPORT_TIME_ZONE, addDays,
+  type CustomersQuery, type RevenueQuery, type SummaryQuery, type TopProductsQuery
+} from "../validators/report.validators.ts";
+
+// SUM(bigint), ROUND(...) and NUMERIC arrive as text; COUNT(*)::int as a number
+type DbNumber = string | number | null | undefined;
 
 // Orders that count as sales: the money has been received
 const SOLD = "o.status IN ('paid', 'shipped', 'delivered')";
@@ -19,42 +25,51 @@ const SOLD = "o.status IN ('paid', 'shipped', 'delivered')";
 // '2026-10-01'::timestamp AT TIME ZONE 'Asia/Kolkata' = "midnight on Oct 1 in India" as a moment.
 // Comparing the stored column to two moments (rather than converting every row's created_at)
 // lets PostgreSQL use the (status, created_at) index.
-const inRange = (fromPlaceholder, toPlaceholder) => `
+const inRange = (fromPlaceholder: string, toPlaceholder: string): string => `
   o.created_at >= (${fromPlaceholder}::date)::timestamp AT TIME ZONE '${REPORT_TIME_ZONE}'
   AND o.created_at < (${toPlaceholder}::date + 1)::timestamp AT TIME ZONE '${REPORT_TIME_ZONE}'`;
 
 // PostgreSQL sends SUM(bigint) and NUMERIC as text (they can exceed JavaScript's safe range);
-// our sums are far below that, so they become normal numbers here
-const num = (value) => (value === null ? null : Number(value));
+// our sums are far below that, so they become normal numbers here.
+// num: for sums and counts, where "nothing" means 0 (SUM over no sales is NULL, but it's ₹0).
+// numOrNull: where "nothing" is different from 0 (no repeat customers = no average gap).
+const num = (value: DbNumber): number => (value === null || value === undefined ? 0 : Number(value));
+const numOrNull = (value: DbNumber): number | null => (value === null || value === undefined ? null : Number(value));
 
 // +25.5 means "25.5% more than the previous period". null when there's nothing to compare with.
-const changePercent = (current, previous) =>
+const changePercent = (current: number, previous: number): number | null =>
   previous > 0 ? Math.round(((current - previous) / previous) * 1000) / 10 : null;
 
-const dataAsOf = async () =>
-  (await pool.query("SELECT refreshed_at FROM report_refreshes WHERE name = 'daily_sales'")).rows[0]?.refreshed_at ?? null;
+const dataAsOf = async (): Promise<Date | null> =>
+  (await pool.query<{ refreshed_at: Date }>("SELECT refreshed_at FROM report_refreshes WHERE name = 'daily_sales'")).rows[0]?.refreshed_at ?? null;
 
 // Re-runs the view's query and swaps in the new result. CONCURRENTLY: dashboards can keep
 // reading the old numbers while it runs (it needs the unique index on day).
-export const refreshSalesReport = async () => {
+export const refreshSalesReport = async (): Promise<Date> => {
   await pool.query("REFRESH MATERIALIZED VIEW CONCURRENTLY daily_sales");
-  const { rows } = await pool.query(
+  const { rows: [refreshed] } = await pool.query<{ refreshed_at: Date }>(
     `INSERT INTO report_refreshes (name, refreshed_at) VALUES ('daily_sales', NOW())
      ON CONFLICT (name) DO UPDATE SET refreshed_at = EXCLUDED.refreshed_at
      RETURNING refreshed_at`
   );
-  return rows[0].refreshed_at;
+  // An upsert with RETURNING always gives back its row
+  return refreshed?.refreshed_at ?? new Date();
 };
 
 // ---------- Summary: this period vs the one before ----------
 
-export const getSummary = async ({ from, to }) => {
+export const getSummary = async ({ from, to }: SummaryQuery) => {
   // The previous period has the same length and ends the day before this one starts
   const length = (Date.parse(to) - Date.parse(from)) / 86_400_000 + 1;
   const previous = { from: addDays(from, -length), to: addDays(from, -1) };
 
   // One pass over both periods: FILTER (WHERE ...) makes each SUM count only its own days
-  const { rows: [row] } = await pool.query(
+  type SummaryRow = Record<
+    "revenue" | "orders" | "units" | "discounts" | "previous_revenue" | "previous_orders" | "previous_units" | "previous_discounts",
+    string | null
+  >;
+  // An aggregate without GROUP BY always returns exactly one row (of NULLs if nothing matched)
+  const { rows: [row = {} as Partial<SummaryRow>] } = await pool.query<SummaryRow>(
     `SELECT
        SUM(revenue) FILTER (WHERE day >= $1) AS revenue,
        SUM(orders) FILTER (WHERE day >= $1) AS orders,
@@ -69,12 +84,12 @@ export const getSummary = async ({ from, to }) => {
     [from, to, previous.from]
   );
 
-  const metric = (current, before) => ({
-    value: num(current) ?? 0,
-    previous: num(before) ?? 0,
-    changePercent: changePercent(num(current) ?? 0, num(before) ?? 0)
+  const metric = (current: DbNumber, before: DbNumber) => ({
+    value: num(current),
+    previous: num(before),
+    changePercent: changePercent(num(current), num(before))
   });
-  const aov = (revenue, orders) => (num(orders) > 0 ? Math.round(num(revenue) / num(orders)) : 0);
+  const aov = (revenue: DbNumber, orders: DbNumber): number => (num(orders) > 0 ? Math.round(num(revenue) / num(orders)) : 0);
 
   return {
     from,
@@ -91,7 +106,7 @@ export const getSummary = async ({ from, to }) => {
 
 // ---------- Revenue over time ----------
 
-export const getRevenueSeries = async ({ from, to, interval }) => {
+export const getRevenueSeries = async ({ from, to, interval }: RevenueQuery) => {
   // generate_series makes EVERY period in the range, and the LEFT JOIN fills days without
   // sales with 0. Otherwise a chart would silently skip the quiet days.
   // Window functions then work across the finished list of periods, in date order.
@@ -147,9 +162,9 @@ export const getRevenueSeries = async ({ from, to, interval }) => {
 // ---------- Best-selling products ----------
 
 // by: "revenue" or "units" (a fixed list: column names can't be $1 placeholders)
-const RANK_BY = { revenue: "revenue", units: "units" };
+const RANK_BY: Record<TopProductsQuery["by"], string> = { revenue: "revenue", units: "units" };
 
-export const getTopProducts = async ({ from, to, by, limit }) => {
+export const getTopProducts = async ({ from, to, by, limit }: TopProductsQuery) => {
   const { rows } = await pool.query(
     `WITH sold AS (
        SELECT
@@ -188,7 +203,7 @@ export const getTopProducts = async ({ from, to, by, limit }) => {
       unitsSold: num(row.units),
       // Before order-level coupon discounts (those apply to the whole order, not one product)
       revenue: num(row.revenue),
-      revenueSharePercent: num(row.revenue_share),
+      revenueSharePercent: numOrNull(row.revenue_share),   // null if nothing earned anything
       orders: num(row.orders)
     }))
   };
@@ -196,7 +211,7 @@ export const getTopProducts = async ({ from, to, by, limit }) => {
 
 // ---------- Customers: new vs returning ----------
 
-export const getCustomerReport = async ({ from, to, limit }) => {
+export const getCustomerReport = async ({ from, to, limit }: CustomersQuery) => {
   // Window functions run AFTER the WHERE clause. To know if an October order was someone's
   // FIRST EVER order, the numbering must see all their orders, so it happens in a CTE over
   // every sale, and only the outer query keeps the ones in the range.
@@ -236,8 +251,8 @@ export const getCustomerReport = async ({ from, to, limit }) => {
   );
 
   const [{ rows: [stats] }, { rows: top }] = await Promise.all([statsQuery, topQuery]);
-  const customers = num(stats.customers);
-  const newCustomers = num(stats.new_customers);
+  const customers = num(stats?.customers);
+  const newCustomers = num(stats?.new_customers);
 
   return {
     from,
@@ -248,9 +263,9 @@ export const getCustomerReport = async ({ from, to, limit }) => {
     // Had ordered before this range, and came back
     returningCustomers: customers - newCustomers,
     returningPercent: customers > 0 ? Math.round(((customers - newCustomers) / customers) * 1000) / 10 : null,
-    orders: num(stats.orders),
-    repeatOrders: num(stats.repeat_orders),
-    averageDaysBetweenOrders: num(stats.average_days_between_orders),
+    orders: num(stats?.orders),
+    repeatOrders: num(stats?.repeat_orders),
+    averageDaysBetweenOrders: numOrNull(stats?.average_days_between_orders),
     topCustomers: top.map((row) => ({
       rank: num(row.rank),
       userId: row.id,

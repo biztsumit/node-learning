@@ -1,17 +1,50 @@
+import type { PoolClient } from "pg";
 import pool from "../config/db.js";
 import { withTransaction } from "../db/transaction.ts";
 import { AppError } from "../utils/app-error.ts";
-import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.ts";
+import { PG_UNIQUE_VIOLATION, isDatabaseError } from "../utils/db-errors.ts";
+import type { CreateReview, ReviewListQuery, UpdateReview } from "../validators/review.validators.ts";
 
-// "riya sharma" → "Riya S." (a public page shouldn't show customers' full names)
-const displayName = (fullName) => {
-  const [first, ...rest] = fullName.trim().split(/\s+/);
-  const last = rest.at(-1);
-  const firstName = first[0].toUpperCase() + first.slice(1);
-  return last ? `${firstName} ${last[0].toUpperCase()}.` : firstName;
+type Stars = 1 | 2 | 3 | 4 | 5;
+
+type ReviewRow = {
+  id: string;
+  rating: Stars;
+  comment: string;
+  created_at: Date;
+  updated_at: Date;
+  user_name: string;
 };
 
-const toReview = (row) => ({
+export type Review = {
+  id: string;
+  rating: Stars;
+  comment: string;
+  reviewer: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ReviewPage = {
+  summary: {
+    average: number;
+    count: number;
+    // How many reviews gave each number of stars. Record<Stars, number>: always all five keys.
+    breakdown: Record<Stars, number>;
+  };
+  reviews: Review[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+};
+
+// "riya sharma" → "Riya S." (a public page shouldn't show customers' full names)
+const displayName = (fullName: string): string => {
+  const [first = "", ...rest] = fullName.trim().split(/\s+/);
+  const last = rest.at(-1);
+  const firstName = first.charAt(0).toUpperCase() + first.slice(1);
+  return last ? `${firstName} ${last.charAt(0).toUpperCase()}.` : firstName;
+};
+
+const toReview = (row: ReviewRow): Review => ({
   id: row.id,
   rating: row.rating,
   comment: row.comment,
@@ -26,7 +59,8 @@ const SELECT_REVIEWS = `
   JOIN users u ON u.id = r.user_id
 `;
 
-const REVIEW_SORT = {
+// ORDER BY can't use $1 placeholders: the sort comes from this fixed list (keys = the validator's choices)
+const REVIEW_SORT: Record<ReviewListQuery["sort"], string> = {
   newest: "r.created_at DESC, r.id DESC",
   highest: "r.rating DESC, r.created_at DESC, r.id DESC",
   lowest: "r.rating ASC, r.created_at DESC, r.id DESC"
@@ -34,9 +68,9 @@ const REVIEW_SORT = {
 
 // ---------- Reading ----------
 
-export const listReviews = async (productId, { sort, page, limit }) => {
+export const listReviews = async (productId: string, { sort, page, limit }: ReviewListQuery): Promise<ReviewPage> => {
 
-  const { rows: [product] } = await pool.query(
+  const { rows: [product] } = await pool.query<{ rating_avg: string; rating_count: number }>(
     "SELECT rating_avg, rating_count FROM products WHERE id = $1",
     [productId]
   );
@@ -46,7 +80,7 @@ export const listReviews = async (productId, { sort, page, limit }) => {
   }
 
   const [reviewsResult, breakdownResult] = await Promise.all([
-    pool.query(
+    pool.query<ReviewRow>(
       `${SELECT_REVIEWS}
        WHERE r.product_id = $1
        ORDER BY ${REVIEW_SORT[sort]}
@@ -54,7 +88,7 @@ export const listReviews = async (productId, { sort, page, limit }) => {
       [productId, limit, (page - 1) * limit]
     ),
     // How many 5-star, 4-star, ... reviews: one row per rating value
-    pool.query(
+    pool.query<{ rating: Stars; count: number }>(
       `SELECT rating, COUNT(*)::int AS count
        FROM reviews
        WHERE product_id = $1
@@ -63,7 +97,7 @@ export const listReviews = async (productId, { sort, page, limit }) => {
     )
   ]);
 
-  const breakdown = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+  const breakdown: Record<Stars, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
   for (const row of breakdownResult.rows) {
     breakdown[row.rating] = row.count;
   }
@@ -86,7 +120,7 @@ export const listReviews = async (productId, { sort, page, limit }) => {
 
 // Recalculates the stored average and count from the reviews table.
 // Called inside the same transaction as every review change.
-const refreshProductRating = (client, productId) =>
+const refreshProductRating = (client: PoolClient, productId: string) =>
   client.query(
     `UPDATE products
      SET rating_avg = COALESCE((SELECT ROUND(AVG(rating), 2) FROM reviews WHERE product_id = $1), 0),
@@ -97,7 +131,7 @@ const refreshProductRating = (client, productId) =>
 
 // Locks the product row. Every review change for a product takes this lock first,
 // so two reviews saved at the same moment can't both calculate the average from stale data.
-const lockProduct = async (client, productId) => {
+const lockProduct = async (client: PoolClient, productId: string): Promise<void> => {
   const { rows } = await client.query("SELECT id FROM products WHERE id = $1 FOR UPDATE", [productId]);
   if (rows.length === 0) {
     throw new AppError(404, "Product not found");
@@ -105,8 +139,8 @@ const lockProduct = async (client, productId) => {
 };
 
 // Only customers who actually received the product may review it
-const hasReceivedProduct = async (client, userId, productId) => {
-  const { rows } = await client.query(
+const hasReceivedProduct = async (client: PoolClient, userId: string, productId: string): Promise<boolean> => {
+  const { rows } = await client.query<{ received: boolean }>(
     `SELECT EXISTS (
        SELECT 1
        FROM orders o
@@ -115,15 +149,18 @@ const hasReceivedProduct = async (client, userId, productId) => {
      ) AS received`,
     [userId, productId]
   );
-  return rows[0].received;
+  return rows[0]?.received ?? false;
 };
 
-const getReviewById = async (client, reviewId) => {
-  const { rows } = await client.query(`${SELECT_REVIEWS} WHERE r.id = $1`, [reviewId]);
-  return toReview(rows[0]);
+const getReviewById = async (client: PoolClient, reviewId: string): Promise<Review> => {
+  const { rows: [row] } = await client.query<ReviewRow>(`${SELECT_REVIEWS} WHERE r.id = $1`, [reviewId]);
+  if (!row) {
+    throw new AppError(404, "Review not found");
+  }
+  return toReview(row);
 };
 
-export const createReview = async (userId, productId, { rating, comment }) => {
+export const createReview = async (userId: string, productId: string, { rating, comment }: CreateReview): Promise<Review> => {
   return withTransaction(async (client) => {
 
     await lockProduct(client, productId);
@@ -132,18 +169,21 @@ export const createReview = async (userId, productId, { rating, comment }) => {
       throw new AppError(403, "You can only review products from your delivered orders");
     }
 
-    let reviewId;
+    let reviewId: string | undefined;
     try {
-      const { rows } = await client.query(
+      const { rows } = await client.query<{ id: string }>(
         "INSERT INTO reviews (product_id, user_id, rating, comment) VALUES ($1, $2, $3, $4) RETURNING id",
         [productId, userId, rating, comment]
       );
-      reviewId = rows[0].id;
+      reviewId = rows[0]?.id;
     } catch (err) {
-      if (err.code === PG_UNIQUE_VIOLATION) {
+      if (isDatabaseError(err) && err.code === PG_UNIQUE_VIOLATION) {
         throw new AppError(409, "You've already reviewed this product. Edit your review instead");
       }
       throw err;
+    }
+    if (!reviewId) {
+      throw new Error("Expected the new review's id");
     }
 
     await refreshProductRating(client, productId);
@@ -152,12 +192,12 @@ export const createReview = async (userId, productId, { rating, comment }) => {
 };
 
 // Edits the logged-in user's own review of this product
-export const updateMyReview = async (userId, productId, fields) => {
+export const updateMyReview = async (userId: string, productId: string, fields: UpdateReview): Promise<Review> => {
   return withTransaction(async (client) => {
 
     await lockProduct(client, productId);
 
-    const { rows } = await client.query(
+    const { rows: [updated] } = await client.query<{ id: string }>(
       `UPDATE reviews
        SET rating = COALESCE($3, rating),
            comment = COALESCE($4, comment),
@@ -167,16 +207,16 @@ export const updateMyReview = async (userId, productId, fields) => {
       [productId, userId, fields.rating ?? null, fields.comment ?? null]
     );
 
-    if (rows.length === 0) {
+    if (!updated) {
       throw new AppError(404, "You haven't reviewed this product");
     }
 
     await refreshProductRating(client, productId);
-    return getReviewById(client, rows[0].id);
+    return getReviewById(client, updated.id);
   });
 };
 
-export const deleteMyReview = async (userId, productId) => {
+export const deleteMyReview = async (userId: string, productId: string): Promise<void> => {
   await withTransaction(async (client) => {
 
     await lockProduct(client, productId);
@@ -186,7 +226,7 @@ export const deleteMyReview = async (userId, productId) => {
       [productId, userId]
     );
 
-    if (rowCount === 0) {
+    if (!rowCount) {
       throw new AppError(404, "You haven't reviewed this product");
     }
 
@@ -195,10 +235,10 @@ export const deleteMyReview = async (userId, productId) => {
 };
 
 // Admins removing any review (e.g. spam or abuse)
-export const deleteReviewById = async (reviewId) => {
+export const deleteReviewById = async (reviewId: string): Promise<void> => {
   await withTransaction(async (client) => {
 
-    const { rows: [review] } = await client.query("SELECT product_id FROM reviews WHERE id = $1", [reviewId]);
+    const { rows: [review] } = await client.query<{ product_id: string }>("SELECT product_id FROM reviews WHERE id = $1", [reviewId]);
 
     if (!review) {
       throw new AppError(404, "Review not found");

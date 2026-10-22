@@ -7,10 +7,10 @@ import { canChangeStatus } from "../utils/order-status.ts";
 import { orderNumbers } from "../utils/order-number.ts";
 import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.ts";
 import { enqueue } from "../jobs/queue.js";
-import { getAddress } from "./address.services.js";
+import { getAddress } from "./address.services.ts";
 import { processRefund, requestRefund } from "./refund.services.ts";
 import { optionsLabel } from "./variant.services.ts";
-import { releaseCoupon, recordRedemption, reserveCoupon } from "./coupon.services.js";
+import { releaseCoupon, recordRedemption, reserveCoupon } from "./coupon.services.ts";
 import { setStockContext } from "../db/stock-context.ts";
 import { pagedQuery, timestampKey } from "../utils/cursor.ts";
 

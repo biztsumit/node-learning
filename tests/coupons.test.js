@@ -4,7 +4,7 @@ import {
   api, pool, resetDatabase, closeDatabase, warmUpPool,
   createUser, createProduct, createAddress
 } from "./helpers.js";
-import { calculateDiscount } from "../src/services/coupon.services.js";
+import { calculateDiscount } from "../src/services/coupon.services.ts";
 import { buildOrderEmail } from "../src/emails/order-emails.js";
 
 beforeEach(resetDatabase);

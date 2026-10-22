@@ -1,4 +1,4 @@
-import * as addressService from "../services/address.services.js";
+import * as addressService from "../services/address.services.ts";
 import { AppError } from "../utils/app-error.ts";
 
 // GET /addresses

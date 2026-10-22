@@ -9,7 +9,7 @@ import { findUserById } from "../services/user.services.ts";
 import { sendEmail } from "../emails/transport.js";
 import { expireUnpaidOrders, getOrderById } from "../services/order.services.js";
 import { retryPendingRefunds } from "../services/refund.services.ts";
-import { refreshSalesReport } from "../services/report.services.js";
+import { refreshSalesReport } from "../services/report.services.ts";
 
 export const JOBS = {
 

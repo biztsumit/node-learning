@@ -95,7 +95,7 @@ Ordered so each phase builds on the previous one. ⭐ = recommended next.
 - [ ] 12.2 TypeScript, gradually (Node 24 runs .ts directly; `npm run typecheck` in CI)
   - [x] Foundation: settings, errors, order rules, cursors, request context, transactions, auth (+ typed `req.user`)
   - [x] Validators (each exports its z.infer type) and the validate middleware
-  - [ ] Services (done: category, wishlist, audit, user, stock, auth-token, account, razorpay, cloudinary, variant, cart, refund; left: coupon, payment, report, product, order, review, address), then controllers and routes, then tests; finally `allowJs: false`
+  - [ ] Services (16 of 19 done; left: payment, product, order), then controllers and routes, then tests; finally `allowJs: false`
 - [ ] 12.3 Observability: error tracking (Sentry), metrics (`/metrics` for Prometheus), tracing (OpenTelemetry)
 - [ ] 12.4 Refresh tokens in httpOnly cookies; two-factor login for admins
 - [ ] 12.5 A staging environment that mirrors production
