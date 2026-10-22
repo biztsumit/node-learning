@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
-import { deleteOldIdempotencyKeys } from "../src/middlewares/idempotency.middleware.js";
+import { deleteOldIdempotencyKeys } from "../src/middlewares/idempotency.middleware.ts";
 import {
   api, pool, resetDatabase, closeDatabase, warmUpPool,
   createUser, createProduct, createAddress

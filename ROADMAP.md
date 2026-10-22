@@ -96,7 +96,8 @@ Ordered so each phase builds on the previous one. ⭐ = recommended next.
   - [x] Foundation: settings, errors, order rules, cursors, request context, transactions, auth (+ typed `req.user`)
   - [x] Validators (each exports its z.infer type) and the validate middleware
   - [x] Services (all 19)
-  - [ ] Controllers and routes, the remaining middleware, jobs, emails, config, then tests; finally `allowJs: false`
+  - [x] Controllers, routes and all middleware (`Checked<Params, Body, Query>` requests, `currentUser(req)`)
+  - [ ] Jobs, emails, cache, config, db scripts, app/server, then tests; finally `allowJs: false`
 - [ ] 12.3 Observability: error tracking (Sentry), metrics (`/metrics` for Prometheus), tracing (OpenTelemetry)
 - [ ] 12.4 Refresh tokens in httpOnly cookies; two-factor login for admins
 - [ ] 12.5 A staging environment that mirrors production

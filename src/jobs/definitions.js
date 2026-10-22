@@ -1,6 +1,6 @@
 // Every kind of background job, with its retry rules. The queue (queue.js) runs them.
 import { logger } from "../config/logger.js";
-import { deleteOldIdempotencyKeys } from "../middlewares/idempotency.middleware.js";
+import { deleteOldIdempotencyKeys } from "../middlewares/idempotency.middleware.ts";
 import { deleteImage } from "../services/cloudinary.client.ts";
 import { buildAuthEmail } from "../emails/auth-emails.js";
 import { buildOrderEmail } from "../emails/order-emails.js";

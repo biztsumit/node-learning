@@ -1,4 +1,5 @@
-import type { NextFunction, Request, Response } from "express";
+import type { NextFunction, Response } from "express";
+import type { AnyRequest } from "../types/http.ts";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { env } from "../config/env.ts";
@@ -6,7 +7,7 @@ import { getAuthState } from "../services/user.services.ts";
 import { AppError } from "../utils/app-error.ts";
 import { idSchema } from "../validators/common.validators.ts";
 import { setActor } from "../context/request-context.ts";
-import type { Role } from "../types/express.d.ts";
+import type { AuthUser, Role } from "../types/express.d.ts";
 
 // What we put in our tokens. TypeScript types disappear when the code runs, so data from
 // OUTSIDE (a token, a request body) is checked at run time with zod, and z.infer gives
@@ -37,7 +38,7 @@ const readToken = (token: string): TokenPayload => {
   return parsed.data;
 };
 
-export const requireAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const requireAuth = async (req: AnyRequest, res: Response, next: NextFunction): Promise<void> => {
 
   const authHeader = req.headers.authorization;
 
@@ -62,8 +63,19 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
   next();
 };
 
+// The logged-in user, in a controller behind requireAuth. req.user is optional in Express's
+// types (public routes have nobody logged in), so this checks it's really there: if a route
+// were ever wired up without requireAuth, the request fails with 401 instead of crashing.
+// It only needs the user, so it accepts any request that may carry one.
+export const currentUser = (req: { user?: AuthUser }): AuthUser => {
+  if (!req.user) {
+    throw new AppError(401, "Login required");
+  }
+  return req.user;
+};
+
 // Use after requireAuth, which sets req.user
-export const requireAdmin = (req: Request, res: Response, next: NextFunction): void => {
+export const requireAdmin = (req: AnyRequest, res: Response, next: NextFunction): void => {
 
   if (req.user?.role !== "admin") {
     throw new AppError(403, "Admin access required");

@@ -1,0 +1,34 @@
+import { Router } from "express";
+import {
+  placeOrder,
+  getMyOrders,
+  getMyOrder,
+  getMyOrderByNumber,
+  cancelMyOrder
+} from "../controllers/order.controllers.ts";
+import { startOrderPayment, verifyOrderPayment } from "../controllers/payment.controllers.ts";
+import { requireAuth } from "../middlewares/auth.middleware.ts";
+import { idempotency } from "../middlewares/idempotency.middleware.ts";
+import { requirePaymentsEnabled } from "../middlewares/payments.middleware.ts";
+import { validate } from "../middlewares/validate.middleware.ts";
+import { idParamSchema } from "../validators/common.validators.ts";
+import { checkoutSchema, orderListQuerySchema, orderNumberParamSchema } from "../validators/order.validators.ts";
+import { verifyPaymentSchema } from "../validators/payment.validators.ts";
+
+const router = Router();
+
+// Customers: every route here works on the logged-in user's own orders only
+router.use(requireAuth);
+
+// Idempotency-Key: a retried checkout returns the first order instead of placing a second one
+router.post("/", idempotency, validate({ body: checkoutSchema }), placeOrder);
+router.get("/", validate({ query: orderListQuerySchema }), getMyOrders);
+router.get("/number/:orderNumber", validate({ params: orderNumberParamSchema }), getMyOrderByNumber);
+router.get("/:id", validate({ params: idParamSchema }), getMyOrder);
+router.post("/:id/cancel", validate({ params: idParamSchema }), cancelMyOrder);
+
+// Paying for an order with Razorpay
+router.post("/:id/payment", requirePaymentsEnabled, validate({ params: idParamSchema }), startOrderPayment);
+router.post("/:id/payment/verify", requirePaymentsEnabled, validate({ params: idParamSchema, body: verifyPaymentSchema }), verifyOrderPayment);
+
+export default router;

@@ -16,7 +16,7 @@ declare module "express-serve-static-core" {
   interface Request {
     // Set by requireAuth. Optional: on public routes nobody is logged in.
     user?: AuthUser;
-    // Set by the request logger (pino-http): this request's id, also sent in error responses
-    id?: string | number | object;
+    // (req.id, the request's id, is declared by pino-http itself. Declaring it again here, with
+    // a different type, quietly made Express's Request incompatible with Node's request type.)
   }
 }
