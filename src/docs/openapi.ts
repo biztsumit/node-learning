@@ -4,7 +4,7 @@
 // to validate, so the docs can't drift away from what the API really accepts.
 import { z } from "zod";
 import { MAX_QUANTITY_PER_ITEM, addCartItemSchema, updateCartItemSchema } from "../validators/cart.validators.ts";
-import { registerSchema, loginSchema, updateProfileSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, verifyEmailSchema } from "../validators/auth.validators.ts";
+import { registerSchema, loginSchema, updateProfileSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, verifyEmailSchema, loginTwoFactorSchema, enableTwoFactorSchema, disableTwoFactorSchema } from "../validators/auth.validators.ts";
 import { categorySchema } from "../validators/category.validators.ts";
 import { productSchema, productUpdateSchema, productListQuerySchema } from "../validators/product.validators.ts";
 import { createVariantSchema, updateVariantSchema } from "../validators/variant.validators.ts";
@@ -162,9 +162,55 @@ export const openApiDocument = {
     "/auth/login": {
       post: {
         tags: ["Auth"], summary: "Log in and get a token", ...PUBLIC,
-        description: "Only failed attempts count towards the rate limit.",
+        description: "Only failed attempts count towards the rate limit. Returns a 15-minute access token, and sets the refresh token as an httpOnly cookie (`refresh_token`, path /auth). With two-factor login on, the answer is instead `{ twoFactorRequired: true, challengeToken }`: send it with a code to POST /auth/login/2fa within 5 minutes.",
         requestBody: jsonBody(loginSchema),
+        responses: { ...ok("Logged in (or a two-factor challenge)", { oneOf: [ref("AuthResult"), ref("TwoFactorChallenge")] }), ...errors(400, 401, 429) }
+      }
+    },
+    "/auth/login/2fa": {
+      post: {
+        tags: ["Auth"], summary: "Second step of a two-factor login", ...PUBLIC,
+        description: "`code` is the 6-digit code from the authenticator app, or one of the recovery codes (each works once).",
+        requestBody: jsonBody(loginTwoFactorSchema),
         responses: { ...ok("Logged in", ref("AuthResult")), ...errors(400, 401, 429) }
+      }
+    },
+    "/auth/refresh": {
+      post: {
+        tags: ["Auth"], summary: "Get a new access token with the refresh-token cookie", ...PUBLIC,
+        description: "Send with the cookie (browsers: `credentials: 'include'`). Returns a new access token and replaces the refresh token. A refresh token that was already used ends the whole session (it was probably copied). 409 if another tab refreshed the same session a moment ago: retry.",
+        responses: { ...ok("Refreshed", { type: "object", properties: { token: { type: "string" }, accessTokenExpiresIn: { type: "string", example: "15m" } } }), ...errors(401, 403, 409) }
+      }
+    },
+    "/auth/logout": {
+      post: { tags: ["Auth"], summary: "Log out on this device (ends this session, clears the cookie)", ...PUBLIC, responses: { ...message("Logged out"), ...errors(403) } }
+    },
+    "/auth/2fa": {
+      get: {
+        tags: ["Auth"], summary: "Is two-factor login on? How many recovery codes are left?", ...LOGGED_IN,
+        responses: { ...ok("Status", { type: "object", properties: { enabled: { type: "boolean" }, recoveryCodesLeft: { type: "integer" } } }), ...errors(401) }
+      }
+    },
+    "/auth/2fa/setup": {
+      post: {
+        tags: ["Auth"], summary: "Start setting up two-factor login", ...LOGGED_IN,
+        description: "Returns the secret for an authenticator app: show `otpauthUrl` as a QR code (or let the user type `secret`). Nothing changes until POST /auth/2fa/enable with a code.",
+        responses: { ...ok("Secret", { type: "object", properties: { secret: { type: "string", example: "JBSWY3DPEHPK3PXP" }, otpauthUrl: { type: "string" } } }), ...errors(401, 409) }
+      }
+    },
+    "/auth/2fa/enable": {
+      post: {
+        tags: ["Auth"], summary: "Turn two-factor login on (with a code from the app)", ...LOGGED_IN,
+        description: "Returns 10 one-time recovery codes. They're shown only this once.",
+        requestBody: jsonBody(enableTwoFactorSchema),
+        responses: { ...ok("On", { type: "object", properties: { recoveryCodes: { type: "array", items: { type: "string", example: "k7m2-q9xp" } } } }), ...errors(400, 401, 409, 429) }
+      }
+    },
+    "/auth/2fa/disable": {
+      post: {
+        tags: ["Auth"], summary: "Turn two-factor login off (password + code)", ...LOGGED_IN,
+        requestBody: jsonBody(disableTwoFactorSchema),
+        responses: { ...message("Off"), ...errors(400, 401, 429) }
       }
     },
     "/auth/me": {
@@ -216,7 +262,7 @@ export const openApiDocument = {
       }
     },
     "/auth/logout-all": {
-      post: { tags: ["Auth"], summary: "Log out on every device", ...LOGGED_IN, responses: { ...message("Logged out everywhere"), ...errors(401) } }
+      post: { tags: ["Auth"], summary: "Log out on every device (every access token and session ends)", ...LOGGED_IN, responses: { ...message("Logged out everywhere"), ...errors(401) } }
     },
 
     // ----- Catalog -----
@@ -660,7 +706,18 @@ export const openApiDocument = {
       },
       AuthResult: {
         type: "object",
-        properties: { user: ref("User"), token: { type: "string", description: "Send as `Authorization: Bearer <token>`" } }
+        properties: {
+          user: ref("User"),
+          token: { type: "string", description: "The access token. Send as `Authorization: Bearer <token>`; get a new one from POST /auth/refresh before it expires" },
+          accessTokenExpiresIn: { type: "string", example: "15m" }
+        }
+      },
+      TwoFactorChallenge: {
+        type: "object",
+        properties: {
+          twoFactorRequired: { const: true },
+          challengeToken: { type: "string", description: "Send with a code to POST /auth/login/2fa (valid 5 minutes)" }
+        }
       },
       WishlistItem: {
         type: "object",

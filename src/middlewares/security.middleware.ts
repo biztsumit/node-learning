@@ -1,4 +1,6 @@
+import type { NextFunction, Response } from "express";
 import cors from "cors";
+import type { AnyRequest } from "../types/http.ts";
 import helmet from "helmet";
 import { rateLimit, type Options as RateLimitOptions } from "express-rate-limit";
 import { env } from "../config/env.ts";
@@ -23,6 +25,8 @@ export const corsPolicy = cors({
     // true = send the "allowed" headers; false = send none, and the browser blocks the page
     callback(null, env.CORS_ORIGINS.includes(origin));
   },
+  // Allow the browser to send cookies (the refresh token) with requests from allowed sites
+  credentials: true,
   // Let browser code read these response headers (e.g. to show "try again in 30s",
   // know a response was a replay, or quote the request id in a bug report)
   exposedHeaders: ["RateLimit", "RateLimit-Policy", "Retry-After", "Idempotency-Replayed", "X-Request-Id"]
@@ -74,3 +78,18 @@ export const signupLimiter = limiter({
   limit: env.SIGNUP_RATE_LIMIT,
   message: "Too many accounts created from this network. Please try again later"
 });
+
+// ---------- Requests that use the refresh cookie ----------
+
+// The browser attaches cookies automatically, so another website could try to make a
+// visitor's browser call /auth/refresh or /auth/logout ("cross-site request forgery").
+// SameSite=lax already stops that; for SameSite=none setups this is the second lock: a
+// browser request from a site that isn't in CORS_ORIGINS is refused. (Requests without an
+// Origin header aren't from a web page: apps, curl, tests.)
+export const requireTrustedOrigin = (req: AnyRequest, res: Response, next: NextFunction): void => {
+  const origin = req.get("origin");
+  if (origin && !env.CORS_ORIGINS.includes(origin)) {
+    throw new AppError(403, "This site isn't allowed to use your login session");
+  }
+  next();
+};

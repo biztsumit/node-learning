@@ -17,6 +17,7 @@ export type PublicUser = {
 export type UserWithSecrets = Omit<PublicUser, "created_at"> & {
   password_hash: string;
   token_version: number;
+  totp_enabled_at: Date | null;     // two-factor login is on
 };
 
 // After a password or token change: what's needed to issue a fresh token
@@ -24,7 +25,7 @@ type TokenState = { id: string; role: Role; token_version: number };
 
 export const findUserByEmail = async (email: string): Promise<UserWithSecrets | undefined> => {
   const { rows } = await pool.query<UserWithSecrets>(
-    "SELECT id, name, email, role, password_hash, token_version FROM users WHERE email = $1",
+    "SELECT id, name, email, role, password_hash, token_version, totp_enabled_at FROM users WHERE email = $1",
     [email]
   );
   return rows[0];

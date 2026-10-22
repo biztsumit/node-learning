@@ -6,6 +6,7 @@ import { deleteImage } from "../services/cloudinary.client.ts";
 import { buildAuthEmail } from "../emails/auth-emails.ts";
 import { buildOrderEmail, type OrderEmailType } from "../emails/order-emails.ts";
 import { deleteDeadTokens, type TokenPurpose } from "../services/auth-token.services.ts";
+import { deleteDeadSessions } from "../services/session.services.ts";
 import { findUserById } from "../services/user.services.ts";
 import { sendEmail } from "../emails/transport.ts";
 import { expireUnpaidOrders, getOrderById } from "../services/order.services.ts";
@@ -87,7 +88,7 @@ export const JOBS = {
       const cancelled = await expireUnpaidOrders();
       const deletedKeys = await deleteOldIdempotencyKeys();
       const retriedRefunds = await retryPendingRefunds();
-      const deletedTokens = await deleteDeadTokens();
+      const deletedTokens = await deleteDeadTokens() + await deleteDeadSessions();
       if (cancelled.length > 0 || deletedKeys > 0 || retriedRefunds > 0 || deletedTokens > 0) {
         logger.info(
           { cancelledOrders: cancelled.length, deletedIdempotencyKeys: deletedKeys, retriedRefunds, deletedAuthTokens: deletedTokens },

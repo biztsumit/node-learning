@@ -77,6 +77,31 @@ export const verifyEmailSchema = z.object({
   token: linkTokenSchema
 });
 
+// A code from the authenticator app ("123 456" → "123456") or a recovery code ("k7m2-q9xp")
+const secondFactorCode = z
+  .string({ error: "code is required" })
+  .trim()
+  .min(6, { error: "code must be the 6-digit code from your app, or a recovery code" })
+  .max(20, { error: "code is too long" })
+  .transform((code) => (/^[\d\s]+$/.test(code) ? code.replace(/\s/g, "") : code));
+
+// POST /auth/2fa/enable  { code }
+export const enableTwoFactorSchema = z.object({
+  code: z.string({ error: "code is required" }).trim().regex(/^\d{6}$/, { error: "code must be the 6-digit code from your app" })
+});
+
+// POST /auth/login/2fa  { challengeToken, code }: the second step of a login
+export const loginTwoFactorSchema = z.object({
+  challengeToken: z.string({ error: "challengeToken is required" }).min(1, { error: "challengeToken is required" }).max(1000),
+  code: secondFactorCode
+});
+
+// POST /auth/2fa/disable  { password, code }
+export const disableTwoFactorSchema = z.object({
+  password: z.string({ error: "password is required" }).min(1, { error: "password is required" }),
+  code: secondFactorCode
+});
+
 // The TypeScript types of the CHECKED data (after trimming, defaults, coercion...).
 // Services use these, so the shape is written once: in the schema.
 export type Register = z.infer<typeof registerSchema>;
@@ -86,3 +111,6 @@ export type ChangePassword = z.infer<typeof changePasswordSchema>;
 export type ForgotPassword = z.infer<typeof forgotPasswordSchema>;
 export type ResetPassword = z.infer<typeof resetPasswordSchema>;
 export type VerifyEmail = z.infer<typeof verifyEmailSchema>;
+export type EnableTwoFactor = z.infer<typeof enableTwoFactorSchema>;
+export type LoginTwoFactor = z.infer<typeof loginTwoFactorSchema>;
+export type DisableTwoFactor = z.infer<typeof disableTwoFactorSchema>;

@@ -10,6 +10,8 @@ export type Role = "user" | "admin";
 export type AuthUser = {
   id: string;
   role: Role;
+  // This login passed two-factor (see requireAdmin and REQUIRE_ADMIN_2FA)
+  mfa: boolean;
 };
 
 declare module "express-serve-static-core" {

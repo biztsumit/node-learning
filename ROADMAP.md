@@ -91,12 +91,12 @@ Ordered so each phase builds on the previous one. ⭐ = recommended next.
 
 ## Phase 12 — Engineering maturity
 
-- [ ] 12.1 Docker + docker-compose (app, PostgreSQL, migrations; no Redis needed) for one-command setup: files written, verified by the CI "docker" job
+- [x] 12.1 Docker + docker-compose (app, PostgreSQL, migrations; no Redis needed) for one-command setup, verified on every push by the CI "docker" job
 - [x] 12.2 TypeScript, migrated gradually layer by layer (Node 24 runs .ts directly, no build step; `npm run typecheck` in CI checks the app strictly and the tests with tests/tsconfig.json; allowJs is off)
 - [ ] 12.3 Observability: error tracking (Sentry), metrics (`/metrics` for Prometheus), tracing (OpenTelemetry)
-- [ ] 12.4 Refresh tokens in httpOnly cookies; two-factor login for admins
+- [x] 12.4 Refresh tokens in httpOnly cookies (rotation + reuse detection); two-factor login (TOTP, recovery codes), required for admins with REQUIRE_ADMIN_2FA
 - [ ] 12.5 A staging environment that mirrors production
 
 ## Phase 13 — A frontend
 
-- [ ] 13.1 React + Vite storefront and admin panel using this API (CORS, auth, Razorpay Checkout)
+- [ ] 13.1 Next.js storefront and admin panel using this API (auth with refresh cookies, Razorpay Checkout)

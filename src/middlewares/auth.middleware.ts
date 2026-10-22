@@ -8,6 +8,7 @@ import { AppError } from "../utils/app-error.ts";
 import { idSchema } from "../validators/common.validators.ts";
 import { setActor } from "../context/request-context.ts";
 import type { AuthUser, Role } from "../types/express.d.ts";
+import { ACCESS_AUDIENCE } from "../services/session.services.ts";
 
 // What we put in our tokens. TypeScript types disappear when the code runs, so data from
 // OUTSIDE (a token, a request body) is checked at run time with zod, and z.infer gives
@@ -17,7 +18,9 @@ import type { AuthUser, Role } from "../types/express.d.ts";
 // session (looking a number up in a uuid column would be a database error, a 500).
 const tokenPayloadSchema = z.object({
   userId: idSchema("userId"),
-  tokenVersion: z.number().int()
+  tokenVersion: z.number().int(),
+  // This login passed two-factor (a code from the authenticator app)
+  mfa: z.boolean().default(false)
 });
 
 type TokenPayload = z.infer<typeof tokenPayloadSchema>;
@@ -26,8 +29,14 @@ const readToken = (token: string): TokenPayload => {
   let decoded: unknown;
 
   try {
-    decoded = jwt.verify(token, env.JWT_SECRET);
-  } catch {
+    // Only tokens made to be access tokens (not, say, a 2FA login challenge)
+    decoded = jwt.verify(token, env.JWT_SECRET, { audience: ACCESS_AUDIENCE });
+  } catch (err) {
+    // Correctly signed but not an access token: issued before audiences existed (an old
+    // login), or a different kind of token. Either way, that login is over.
+    if (err instanceof jwt.JsonWebTokenError && err.message.startsWith("jwt audience invalid")) {
+      throw new AppError(401, "Your session has ended. Please log in again");
+    }
     throw new AppError(401, "Invalid or expired token");
   }
 
@@ -57,7 +66,7 @@ export const requireAuth = async (req: AnyRequest, res: Response, next: NextFunc
   }
 
   // The role comes from the database, so a promotion or demotion takes effect immediately
-  req.user = { id: payload.userId, role: user.role };
+  req.user = { id: payload.userId, role: user.role, mfa: payload.mfa };
   // Changes made during this request are recorded as made by this user
   setActor(req.user.id);
   next();
@@ -79,6 +88,11 @@ export const requireAdmin = (req: AnyRequest, res: Response, next: NextFunction)
 
   if (req.user?.role !== "admin") {
     throw new AppError(403, "Admin access required");
+  }
+  // With REQUIRE_ADMIN_2FA on, an admin must ALSO have logged in with a 2FA code: a stolen
+  // admin password alone can't reach admin routes
+  if (env.REQUIRE_ADMIN_2FA && !req.user.mfa) {
+    throw new AppError(403, "Admin access needs two-factor login: turn it on (POST /auth/2fa/setup), then log in again with a code");
   }
 
   next();

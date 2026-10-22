@@ -23,7 +23,24 @@ const envSchema = z.object({
   DB_SSL: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
 
   JWT_SECRET: z.string().min(32, { error: "must be at least 32 characters" }),
-  JWT_EXPIRES_IN: z.string().default("1d"),
+  // How long an ACCESS token works. Short on purpose: if one leaks, it's useless soon.
+  // Staying logged in longer is the refresh token's job (below).
+  JWT_EXPIRES_IN: z.string().regex(/^\d+[smhd]$/, { error: 'must look like "15m", "1h" or "1d"' }).default("15m"),
+
+  // Refresh tokens: "stay logged in" for this many days, kept in an httpOnly cookie
+  REFRESH_TOKEN_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  // Which sites may send that cookie:
+  //   lax  = only our own site (frontend and API on the same site, e.g. behind a proxy)
+  //   none = any site allowed by CORS (frontend on a different domain); needs HTTPS
+  REFRESH_COOKIE_SAMESITE: z.enum(["lax", "strict", "none"]).default("lax"),
+
+  // Two-factor login. true = admins can't use admin routes until they've turned it on and
+  // logged in with a code. Off by default so existing admins aren't locked out: turn on
+  // your own 2FA first, then set this.
+  REQUIRE_ADMIN_2FA: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+  // Encrypts the 2FA secrets in the database (32+ characters). Optional: without it, a key is
+  // derived from JWT_SECRET (but then changing JWT_SECRET makes existing 2FA setups unusable).
+  SECRETS_ENCRYPTION_KEY: z.string().min(32, { error: "must be at least 32 characters" }).optional(),
 
   // Payments (optional): without these the app runs, but payment routes answer 503
   RAZORPAY_KEY_ID: z.string().min(1).optional(),
