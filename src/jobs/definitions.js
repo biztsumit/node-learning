@@ -7,7 +7,7 @@ import { buildOrderEmail } from "../emails/order-emails.js";
 import { deleteDeadTokens } from "../services/auth-token.services.ts";
 import { findUserById } from "../services/user.services.ts";
 import { sendEmail } from "../emails/transport.js";
-import { expireUnpaidOrders, getOrderById } from "../services/order.services.js";
+import { expireUnpaidOrders, getOrderById } from "../services/order.services.ts";
 import { retryPendingRefunds } from "../services/refund.services.ts";
 import { refreshSalesReport } from "../services/report.services.ts";
 

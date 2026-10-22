@@ -2,7 +2,7 @@ import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { sentEmails } from "../src/emails/transport.js";
 import { buildOrderEmail, escapeHtml, ORDER_EMAIL_TYPES } from "../src/emails/order-emails.js";
-import { expireUnpaidOrders, getOrderById } from "../src/services/order.services.js";
+import { expireUnpaidOrders, getOrderById } from "../src/services/order.services.ts";
 import {
   api, pool, resetDatabase, closeDatabase,
   createUser, createProduct, createAddress, placeOrder, setVariantFields

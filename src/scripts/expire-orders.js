@@ -2,7 +2,7 @@
 // Runs the unpaid-order expiry once and exits. The web server already does this every
 // minute; this script is for running it by hand, or from a platform's cron job.
 import pool from "../config/db.js";
-import { expireUnpaidOrders } from "../services/order.services.js";
+import { expireUnpaidOrders } from "../services/order.services.ts";
 
 try {
   const cancelled = await expireUnpaidOrders({ maxOrders: 10_000 });

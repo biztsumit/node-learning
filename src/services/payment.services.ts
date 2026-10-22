@@ -1,3 +1,5 @@
+import type { PoolClient } from "pg";
+import { z } from "zod";
 import { env } from "../config/env.ts";
 import { logger } from "../config/logger.js";
 import { withTransaction } from "../db/transaction.ts";
@@ -5,20 +7,36 @@ import { AppError } from "../utils/app-error.ts";
 import { enqueue } from "../jobs/queue.js";
 import * as razorpay from "./razorpay.client.ts";
 import { processRefund, recordRefundEvent, requestRefund } from "./refund.services.ts";
+import type { VerifyPayment } from "../validators/payment.validators.ts";
 
 // Our prices are whole rupees; Razorpay works in paise (1 rupee = 100 paise)
-const toPaise = (rupees) => rupees * 100;
+const toPaise = (rupees: number): number => rupees * 100;
+
+// What the frontend needs to open Razorpay Checkout
+export type CheckoutDetails = {
+  orderId: string;
+  keyId: string | undefined;
+  razorpayOrderId: string;
+  amount: number;
+  currency: string;
+  prefill: { name: string; email: string; contact: string | null };
+};
+
+type PaymentRequest = { provider_order_id: string; amount: number; currency: string };
 
 // ---------- Step 1: the customer clicks "Pay" ----------
 
 // Creates (or reuses) a Razorpay payment request for one of the user's pending orders,
 // and returns what the frontend needs to open Razorpay Checkout.
-export const startPayment = async (userId, orderId) => {
+export const startPayment = async (userId: string, orderId: string): Promise<CheckoutDetails> => {
 
   return withTransaction(async (client) => {
 
     // Lock the order: two "Pay" clicks at once must not create two payment requests
-    const { rows: [order] } = await client.query(
+    const { rows: [order] } = await client.query<{
+      id: string; order_number: string; status: string; total_amount: number; phone: string | null;
+      expired: boolean; name: string; email: string;
+    }>(
       `SELECT o.id, o.order_number, o.status, o.total_amount, o.shipping_address->>'phone' AS phone,
               o.created_at < NOW() - make_interval(mins => $3) AS expired,
               u.name, u.email
@@ -43,7 +61,7 @@ export const startPayment = async (userId, orderId) => {
     const amount = toPaise(order.total_amount);
 
     // Reuse an unfinished attempt instead of creating a new one on every click
-    const { rows: [existing] } = await client.query(
+    const { rows: [existing] } = await client.query<PaymentRequest>(
       `SELECT provider_order_id, amount, currency FROM payments
        WHERE order_id = $1 AND status = 'created' AND amount = $2
        ORDER BY id DESC LIMIT 1`,
@@ -53,7 +71,7 @@ export const startPayment = async (userId, orderId) => {
     let payment = existing;
 
     if (!payment) {
-      let razorpayOrder;
+      let razorpayOrder: razorpay.RazorpayOrder;
       try {
         razorpayOrder = await razorpay.createRazorpayOrder({
           amount,
@@ -67,13 +85,16 @@ export const startPayment = async (userId, orderId) => {
         throw new AppError(502, "Could not reach the payment provider. Please try again");
       }
 
-      const { rows } = await client.query(
+      const { rows: [created] } = await client.query<PaymentRequest>(
         `INSERT INTO payments (order_id, provider_order_id, amount, currency)
          VALUES ($1, $2, $3, $4)
          RETURNING provider_order_id, amount, currency`,
         [order.id, razorpayOrder.id, razorpayOrder.amount, razorpayOrder.currency]
       );
-      payment = rows[0];
+      if (!created) {
+        throw new Error("Expected the new payment row");
+      }
+      payment = created;
     }
 
     // Everything Razorpay Checkout (in the browser) needs. The key id is public; the secret never leaves the server.
@@ -90,11 +111,25 @@ export const startPayment = async (userId, orderId) => {
 
 // ---------- Recording a successful payment (used by both step 2 and webhooks) ----------
 
+// A DISCRIMINATED UNION: one of these shapes, told apart by "result". After a check like
+// `if (outcome.result === "needs_refund")`, TypeScript knows refundId exists; on other
+// outcomes, reading it is a type error. Every possible outcome is listed in one place.
+type PaymentOutcome =
+  | { result: "unknown_payment" }
+  | { result: "already_paid"; orderId: string }
+  | { result: "amount_mismatch"; orderId: string }
+  | { result: "paid"; orderId: string }
+  | { result: "needs_refund"; orderId: string; refundId: string | null };
+
 // Marks the payment, and its order, as paid. Safe to call many times for the same payment:
 // the browser and Razorpay's webhooks will usually BOTH report the same payment.
-const recordSuccessfulPayment = async (client, { providerOrderId, providerPaymentId, amount }) => {
+// amount is only known from webhooks; the browser's report is proven by its signature instead.
+const recordSuccessfulPayment = async (
+  client: PoolClient,
+  { providerOrderId, providerPaymentId, amount }: { providerOrderId: string; providerPaymentId: string; amount?: number }
+): Promise<PaymentOutcome> => {
 
-  const { rows: [payment] } = await client.query(
+  const { rows: [payment] } = await client.query<{ id: string; order_id: string; amount: number; status: string }>(
     "SELECT id, order_id, amount, status FROM payments WHERE provider_order_id = $1 FOR UPDATE",
     [providerOrderId]
   );
@@ -119,12 +154,12 @@ const recordSuccessfulPayment = async (client, { providerOrderId, providerPaymen
     [providerPaymentId, payment.id]
   );
 
-  const { rows: [order] } = await client.query(
+  const { rows: [order] } = await client.query<{ status: string }>(
     "SELECT status FROM orders WHERE id = $1 FOR UPDATE",
     [payment.order_id]
   );
 
-  if (order.status === "pending") {
+  if (order?.status === "pending") {
     await client.query(
       "UPDATE orders SET status = 'paid', updated_at = NOW() WHERE id = $1",
       [payment.order_id]
@@ -136,7 +171,7 @@ const recordSuccessfulPayment = async (client, { providerOrderId, providerPaymen
   // e.g. the order was cancelled while the customer was on the payment screen:
   // the money arrived, but the order isn't active any more, so it's refunded automatically.
   logger.warn(
-    { providerPaymentId, orderId: payment.order_id, orderStatus: order.status, amount: payment.amount },
+    { providerPaymentId, orderId: payment.order_id, orderStatus: order?.status, amount: payment.amount },
     "Payment received for an inactive order: refunding it"
   );
   const refundId = await requestRefund(client, payment.id, "paid_after_cancellation");
@@ -145,7 +180,11 @@ const recordSuccessfulPayment = async (client, { providerOrderId, providerPaymen
 
 // ---------- Step 2: the browser reports "payment done" ----------
 
-export const confirmPayment = async (userId, orderId, { razorpayOrderId, razorpayPaymentId, razorpaySignature }) => {
+export const confirmPayment = async (
+  userId: string,
+  orderId: string,
+  { razorpayOrderId, razorpayPaymentId, razorpaySignature }: VerifyPayment
+): Promise<void> => {
 
   // Never trust the browser's word for it: check Razorpay's signature first
   if (!razorpay.isValidPaymentSignature({ razorpayOrderId, razorpayPaymentId, razorpaySignature })) {
@@ -184,21 +223,42 @@ export const confirmPayment = async (userId, orderId, { razorpayOrderId, razorpa
 
 // ---------- Webhooks: Razorpay's server tells our server what happened ----------
 
-export const handleRazorpayWebhook = async (rawBody, signature, eventId) => {
+// The parts of a webhook we read. Lenient on purpose: Razorpay sends many event types,
+// and one we don't use must still be accepted (or Razorpay keeps retrying it).
+const webhookEventSchema = z.object({
+  event: z.string(),
+  payload: z.object({
+    payment: z.object({
+      // order_id is null for payments not made through a Razorpay order (not ours)
+      entity: z.object({ id: z.string(), order_id: z.string().nullable(), amount: z.number() })
+    }).optional(),
+    refund: z.object({
+      entity: z.object({ id: z.string().optional(), payment_id: z.string().optional() })
+    }).optional()
+  }).optional()
+});
+
+export const handleRazorpayWebhook = async (rawBody: Buffer, signature: unknown, eventId: string | undefined): Promise<void> => {
 
   if (!razorpay.isValidWebhookSignature(rawBody, signature)) {
     throw new AppError(400, "Invalid webhook signature");
   }
 
-  let event;
+  let json: unknown;
   try {
-    event = JSON.parse(rawBody.toString("utf8"));
+    json = JSON.parse(rawBody.toString("utf8"));
   } catch {
     throw new AppError(400, "Webhook body is not valid JSON");
   }
+  // Signed by Razorpay, so this only fails if their format changed: worth a clear 400 (and they'll retry)
+  const parsed = webhookEventSchema.safeParse(json);
+  if (!parsed.success) {
+    throw new AppError(400, "Webhook body has an unexpected shape");
+  }
+  const event = parsed.data;
 
   // Refunds to send to Razorpay once this event's changes are committed
-  const refundsToSend = [];
+  const refundsToSend: string[] = [];
 
   await withTransaction(async (client) => {
 
@@ -215,7 +275,9 @@ export const handleRazorpayWebhook = async (rawBody, signature, eventId) => {
       }
     }
 
-    const payment = event.payload?.payment?.entity;
+    const entity = event.payload?.payment?.entity;
+    // Only payments for one of our Razorpay orders concern us
+    const payment = entity?.order_id ? { ...entity, order_id: entity.order_id } : undefined;
 
     switch (event.event) {
       case "payment.captured":
@@ -226,7 +288,7 @@ export const handleRazorpayWebhook = async (rawBody, signature, eventId) => {
             providerPaymentId: payment.id,
             amount: payment.amount
           });
-          if (outcome.refundId) {
+          if (outcome.result === "needs_refund" && outcome.refundId) {
             refundsToSend.push(outcome.refundId);
           }
         }
@@ -257,6 +319,6 @@ export const handleRazorpayWebhook = async (rawBody, signature, eventId) => {
   // Not awaited: Razorpay expects a quick reply to webhooks. If sending fails,
   // the refund stays pending and the background job retries it.
   for (const refundId of refundsToSend) {
-    processRefund(refundId).catch((err) => logger.error({ err, refundId }, "Could not send refund"));
+    processRefund(refundId).catch((err: unknown) => logger.error({ err, refundId }, "Could not send refund"));
   }
 };

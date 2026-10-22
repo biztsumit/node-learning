@@ -5,7 +5,7 @@ import {
   createUser, createProduct, createAddress, placeOrder
 } from "./helpers.js";
 import { runWithContext } from "../src/context/request-context.ts";
-import { expireUnpaidOrders } from "../src/services/order.services.js";
+import { expireUnpaidOrders } from "../src/services/order.services.ts";
 
 beforeEach(resetDatabase);
 after(closeDatabase);

@@ -1,4 +1,4 @@
-import * as productService from "../services/product.services.js";
+import * as productService from "../services/product.services.ts";
 import { cacheKey, catalogCache } from "../cache/catalog-cache.js";
 import { AppError } from "../utils/app-error.ts";
 import { PG_FOREIGN_KEY_VIOLATION } from "../utils/db-errors.ts";

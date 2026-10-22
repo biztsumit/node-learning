@@ -1,15 +1,54 @@
 import { randomBytes } from "node:crypto";
+import type { PoolClient } from "pg";
 import pool from "../config/db.js";
 import { logger } from "../config/logger.js";
 import { queryWithContext, withTransaction } from "../db/transaction.ts";
 import { slugify } from "../utils/slugify.ts";
-import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.ts";
+import { PG_UNIQUE_VIOLATION, isDatabaseError } from "../utils/db-errors.ts";
 import { productImagePublicId, thumbnailUrl } from "./cloudinary.client.ts";
 import { enqueue } from "../jobs/queue.js";
 import { AppError } from "../utils/app-error.ts";
-import { listVariants } from "./variant.services.ts";
+import { listVariants, type Variant } from "./variant.services.ts";
 import { setStockContext } from "../db/stock-context.ts";
-import { afterCursor, cursorPage, timestampKey } from "../utils/cursor.ts";
+import { afterCursor, cursorPage, timestampKey, type Pagination, type Sort, type SortKey } from "../utils/cursor.ts";
+import type {
+  Product as ProductInput, ProductListQuery, ProductUpdate
+} from "../validators/product.validators.ts";
+
+// One row of SELECT_PRODUCTS
+type ProductRow = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  price: number;
+  stock: number;
+  image_url: string | null;
+  rating_avg: string;          // NUMERIC arrives as text
+  rating_count: number;
+  variant_count: number;
+  category_id: string | null;
+  category_name: string | null;
+};
+
+// Lists also select the cursor's helper columns
+type ListedProductRow = ProductRow & { created_key: string; relevance_key: string };
+
+export type Product = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  price: number;
+  stock: number;
+  variantCount: number;
+  imageUrl: string | null;
+  thumbnailUrl: string | null;
+  rating: { average: number; count: number };
+  category: { id: string; name: string | null } | null;
+};
+
+export type ProductWithVariants = Product & { variants: Variant[] };
 
 // LEFT JOIN keeps products that have no category (their category columns come back as NULL)
 const SELECT_PRODUCTS = `
@@ -31,7 +70,7 @@ const SELECT_PRODUCTS = `
 `;
 
 // Turns a flat database row into the shape the API sends back
-const toProduct = (row) => ({
+const toProduct = (row: ProductRow): Product => ({
   id: row.id,
   slug: row.slug,
   name: row.name,
@@ -54,10 +93,13 @@ const toProduct = (row) => ({
 // Each is a list of columns ending with p.id, so every product has a unique position
 // (products with the same price always come in the same order), which cursors rely on.
 // value(row): where a page's last row keeps that column's value, for the next cursor.
-const ID = { column: "p.id", type: "uuid", value: (row) => row.id };
-const CREATED = { column: "p.created_at", type: "timestamptz", value: (row) => row.created_key };
+const ID: SortKey = { column: "p.id", type: "uuid", value: (row) => row.id };
+const CREATED: SortKey = { column: "p.created_at", type: "timestamptz", value: (row) => row.created_key };
 
-const SORTS = {
+// Every sort the validator accepts must be defined here (and nothing else)
+type SortName = NonNullable<ProductListQuery["sort"]>;
+
+const SORTS: Record<SortName, Omit<Sort, "name">> = {
   newest: { direction: "desc", keys: [CREATED, ID] },
   price_asc: { direction: "asc", keys: [{ column: "p.price", type: "integer", value: (row) => row.price }, ID] },
   price_desc: { direction: "desc", keys: [{ column: "p.price", type: "integer", value: (row) => row.price }, ID] },
@@ -80,21 +122,23 @@ const SORTS = {
 };
 
 // -word, "exact phrase" or "a or b": the person wants precise rules, not "close enough"
-const usesSearchSyntax = (text) => /(^|\s)-\S|"|\sor\s/i.test(text);
+const usesSearchSyntax = (text: string): boolean => /(^|\s)-\S|"|\sor\s/i.test(text);
 
 // In LIKE patterns, % and _ are wildcards. Escape them so searching "50%" means the text "50%".
-const escapeLike = (text) => text.replace(/[\\%_]/g, (char) => `\\${char}`);
+const escapeLike = (text: string): string => text.replace(/[\\%_]/g, (char) => `\\${char}`);
 
 // Two ways to page through: ?page=3 (with totals, for page-number links) or
 // ?cursor=<nextCursor> (no totals, fast at any depth: for "load more" and infinite scroll)
-export const findProducts = async ({ search, category, minPrice, maxPrice, inStock, sort, page, cursor, limit }) => {
+export const findProducts = async (
+  { search, category, minPrice, maxPrice, inStock, sort, page, cursor, limit }: ProductListQuery
+): Promise<{ products: Product[]; pagination: Pagination }> => {
 
   // Build the WHERE clause from only the filters that were given
-  const conditions = [];
-  const values = [];
+  const conditions: string[] = [];
+  const values: unknown[] = [];
 
   // Adds a value to the list and returns its placeholder: "$1", "$2", ...
-  const addValue = (value) => {
+  const addValue = (value: unknown): string => {
     values.push(value);
     return `$${values.length}`;
   };
@@ -141,8 +185,8 @@ export const findProducts = async ({ search, category, minPrice, maxPrice, inSto
   }
 
   // No sort chosen: best match first when searching, otherwise newest first
-  const name = sort ?? (search ? "relevance" : "newest");
-  const chosen = {
+  const name: SortName = sort ?? (search ? "relevance" : "newest");
+  const chosen: Sort = {
     name,
     direction: SORTS[name].direction,
     keys: SORTS[name].keys.map((key) => ({ ...key, column: key.column.replace("{relevance}", relevance) }))
@@ -160,7 +204,7 @@ export const findProducts = async ({ search, category, minPrice, maxPrice, inSto
   const offset = cursor === undefined ? ((page ?? 1) - 1) * limit : 0;
 
   // limit + 1: the extra row (if any) tells us there's a next page
-  const rowsQuery = pool.query(
+  const rowsQuery = pool.query<ListedProductRow>(
     `${SELECT_PRODUCTS.replace("FROM products p", `, ${timestampKey("p.created_at")} AS created_key, (${relevance})::text AS relevance_key
   FROM products p`)} ${where}
      ORDER BY ${orderBy}
@@ -177,9 +221,9 @@ export const findProducts = async ({ search, category, minPrice, maxPrice, inSto
   // Page numbers: run both queries at the same time, one page of products and the total count
   const [rowsResult, countResult] = await Promise.all([
     rowsQuery,
-    pool.query(`SELECT COUNT(*)::int AS total FROM products p ${filterWhere}`, filterValues)
+    pool.query<{ total: number }>(`SELECT COUNT(*)::int AS total FROM products p ${filterWhere}`, filterValues)
   ]);
-  const total = countResult.rows[0].total;
+  const total = countResult.rows[0]?.total ?? 0;
   const { rows, nextCursor } = cursorPage(rowsResult.rows, limit, chosen);
 
   return {
@@ -196,21 +240,29 @@ export const findProducts = async ({ search, category, minPrice, maxPrice, inSto
 };
 
 // A single product also lists its variants (what customers choose between)
-const withVariants = async (row) =>
+const withVariants = async (row: ProductRow | undefined): Promise<ProductWithVariants | undefined> =>
   row && { ...toProduct(row), variants: await listVariants(row.id) };
 
-export const getProductById = async (id) => {
-  const { rows } = await pool.query(`${SELECT_PRODUCTS} WHERE p.id = $1`, [id]);
+export const getProductById = async (id: string): Promise<ProductWithVariants | undefined> => {
+  const { rows } = await pool.query<ProductRow>(`${SELECT_PRODUCTS} WHERE p.id = $1`, [id]);
   return withVariants(rows[0]);
 };
 
-export const getProductBySlug = async (slug) => {
-  const { rows } = await pool.query(`${SELECT_PRODUCTS} WHERE p.slug = $1`, [slug]);
+export const getProductBySlug = async (slug: string): Promise<ProductWithVariants | undefined> => {
+  const { rows } = await pool.query<ProductRow>(`${SELECT_PRODUCTS} WHERE p.slug = $1`, [slug]);
   return withVariants(rows[0]);
+};
+
+// After creating a product it exists, so "not found" here would be a bug, not a 404
+const mustExist = (product: ProductWithVariants | undefined): ProductWithVariants => {
+  if (!product) {
+    throw new Error("The product just written could not be read back");
+  }
+  return product;
 };
 
 // "t-shirt", then "t-shirt-2" ... "t-shirt-9", then "t-shirt-a1b2c3"
-const slugCandidates = function* (name) {
+const slugCandidates = function* (name: string): Generator<string> {
   const base = slugify(name);
   yield base;
   for (let n = 2; n <= 9; n++) {
@@ -222,21 +274,25 @@ const slugCandidates = function* (name) {
 // Try slugs until one is free. The UNIQUE rule on slug decides, so two products created
 // at the same moment can never get the same slug. Inside a transaction a failed INSERT
 // would spoil everything, so each try gets a SAVEPOINT to roll back to.
-const insertWithFreeSlug = async (client, { name, description, price, stock, imageUrl, categoryId }) => {
+const insertWithFreeSlug = async (client: PoolClient, { name, description, price, stock, imageUrl, categoryId }: ProductInput): Promise<string> => {
   for (const slug of slugCandidates(name)) {
     await client.query("SAVEPOINT product_slug");
     try {
-      const { rows } = await client.query(
+      const { rows } = await client.query<{ id: string }>(
         `INSERT INTO products (slug, name, description, price, stock, image_url, category_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id`,
         [slug, name, description, price, stock, imageUrl, categoryId]
       );
       await client.query("RELEASE SAVEPOINT product_slug");
-      return rows[0].id;
+      const [created] = rows;
+      if (!created) {
+        throw new Error("Expected the new product's id");
+      }
+      return created.id;
     } catch (err) {
       await client.query("ROLLBACK TO SAVEPOINT product_slug");
-      const slugTaken = err.code === PG_UNIQUE_VIOLATION && err.constraint === "products_slug_key";
+      const slugTaken = isDatabaseError(err) && err.code === PG_UNIQUE_VIOLATION && err.constraint === "products_slug_key";
       if (!slugTaken) {
         throw err;
       }
@@ -248,7 +304,7 @@ const insertWithFreeSlug = async (client, { name, description, price, stock, ima
 // Creates the product AND its default variant (no options) in one transaction, so there's
 // never a product without anything to buy. Add more variants with POST /products/:id/variants.
 // adminId: who did it, for the stock ledger
-export const createProduct = async ({ name, description, price, stock, imageUrl, categoryId }, adminId) => {
+export const createProduct = async ({ name, description, price, stock, imageUrl, categoryId }: ProductInput, adminId: string): Promise<ProductWithVariants> => {
 
   const productId = await withTransaction(async (client) => {
     const id = await insertWithFreeSlug(client, { name, description, price, stock, imageUrl, categoryId });
@@ -260,14 +316,14 @@ export const createProduct = async ({ name, description, price, stock, imageUrl,
     return id;
   });
 
-  return getProductById(productId);
+  return mustExist(await getProductById(productId));
 };
 
 // When a product's image changes or the product is deleted, remove the old file from
 // Cloudinary so unused images don't pile up (and cost storage). Only OUR uploads are
 // deleted, never outside links. It's a queued job: it runs after the database change is
 // saved, and if Cloudinary is down the queue retries it later instead of giving up.
-const removeOldImage = async (previousUrl, currentUrl) => {
+const removeOldImage = async (previousUrl: string | null, currentUrl: string | null): Promise<void> => {
   const publicId = productImagePublicId(previousUrl);
   if (!publicId || previousUrl === currentUrl) {
     return;
@@ -284,19 +340,26 @@ const removeOldImage = async (previousUrl, currentUrl) => {
 // replaced, or undefined if there's no such product. (Locking matters: if two admins change
 // the same product at once, each must see the image the OTHER one just set, or a file would
 // be left behind in Cloudinary.)
-const updateAndGetPreviousImage = (id, change) =>
+const updateAndGetPreviousImage = (
+  id: string,
+  change: (client: PoolClient) => Promise<unknown>
+): Promise<{ previousImageUrl: string | null } | undefined> =>
   withTransaction(async (client) => {
-    const { rows } = await client.query("SELECT image_url FROM products WHERE id = $1 FOR UPDATE", [id]);
-    if (rows.length === 0) {
+    const { rows: [current] } = await client.query<{ image_url: string | null }>("SELECT image_url FROM products WHERE id = $1 FOR UPDATE", [id]);
+    if (!current) {
       return undefined;
     }
     await change(client);
-    return { previousImageUrl: rows[0].image_url };
+    return { previousImageUrl: current.image_url };
   });
 
 // The slug is NOT changed on update, so links to the product keep working after a rename.
 // price/stock (optional) belong to the variant: allowed only for a product with ONE variant.
-export const updateProductById = async (id, { name, description, price, stock, imageUrl, categoryId }, adminId) => {
+export const updateProductById = async (
+  id: string,
+  { name, description, price, stock, imageUrl, categoryId }: ProductUpdate,
+  adminId: string
+): Promise<ProductWithVariants | undefined> => {
   const result = await updateAndGetPreviousImage(id, async (client) => {
     await client.query(
       "UPDATE products SET name = $1, description = $2, image_url = $3, category_id = $4 WHERE id = $5",
@@ -304,18 +367,19 @@ export const updateProductById = async (id, { name, description, price, stock, i
     );
 
     if (price !== undefined || stock !== undefined) {
-      const { rows: variants } = await client.query(
+      const { rows: variants } = await client.query<{ id: string }>(
         "SELECT id FROM product_variants WHERE product_id = $1 FOR UPDATE",
         [id]
       );
-      if (variants.length !== 1) {
+      const [only] = variants;
+      if (!only || variants.length !== 1) {
         throw new AppError(409, `This product has ${variants.length} variants: change price and stock on each variant instead`);
       }
       // Setting a new total is a "correction" in the ledger (for deliveries, use a stock movement)
       await setStockContext(client, { reason: "correction", userId: adminId });
       await client.query(
         "UPDATE product_variants SET price = COALESCE($1, price), stock = COALESCE($2, stock) WHERE id = $3",
-        [price ?? null, stock ?? null, variants[0].id]
+        [price ?? null, stock ?? null, only.id]
       );
     }
   });
@@ -327,7 +391,7 @@ export const updateProductById = async (id, { name, description, price, stock, i
 };
 
 // Sets (or, with null, removes) just the product's image
-export const setProductImage = async (id, imageUrl) => {
+export const setProductImage = async (id: string, imageUrl: string | null): Promise<ProductWithVariants | undefined> => {
   const result = await updateAndGetPreviousImage(id, (client) =>
     client.query("UPDATE products SET image_url = $1 WHERE id = $2", [imageUrl, id])
   );
@@ -338,14 +402,14 @@ export const setProductImage = async (id, imageUrl) => {
   return getProductById(id);
 };
 
-export const deleteProductById = async (id) => {
-  const { rows } = await queryWithContext(
+export const deleteProductById = async (id: string): Promise<boolean> => {
+  const { rows: [deleted] } = await queryWithContext<{ image_url: string | null }>(
     "DELETE FROM products WHERE id = $1 RETURNING image_url",
     [id]
   );
-  if (rows.length === 0) {
+  if (!deleted) {
     return false;
   }
-  await removeOldImage(rows[0].image_url, null);
+  await removeOldImage(deleted.image_url, null);
   return true;
 };

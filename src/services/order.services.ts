@@ -1,23 +1,92 @@
+import type { PoolClient } from "pg";
 import pool from "../config/db.js";
 import { env } from "../config/env.ts";
 import { logger } from "../config/logger.js";
 import { withTransaction } from "../db/transaction.ts";
-import { AppError } from "../utils/app-error.ts";
-import { canChangeStatus } from "../utils/order-status.ts";
+import { AppError, type FieldError } from "../utils/app-error.ts";
+import { canChangeStatus, type OrderStatus } from "../utils/order-status.ts";
 import { orderNumbers } from "../utils/order-number.ts";
-import { PG_UNIQUE_VIOLATION } from "../utils/db-errors.ts";
+import { PG_UNIQUE_VIOLATION, isDatabaseError } from "../utils/db-errors.ts";
 import { enqueue } from "../jobs/queue.js";
-import { getAddress } from "./address.services.ts";
+import { getAddress, type Address } from "./address.services.ts";
 import { processRefund, requestRefund } from "./refund.services.ts";
-import { optionsLabel } from "./variant.services.ts";
+import { optionsLabel, type VariantOptions } from "./variant.services.ts";
 import { releaseCoupon, recordRedemption, reserveCoupon } from "./coupon.services.ts";
 import { setStockContext } from "../db/stock-context.ts";
-import { pagedQuery, timestampKey } from "../utils/cursor.ts";
+import { pagedQuery, timestampKey, type Pagination, type Sort } from "../utils/cursor.ts";
+import type { AdminOrderListQuery, Checkout } from "../validators/order.validators.ts";
+
+// Who or what cancelled an order (the order emails explain each one to the customer)
+export type CancelReason = "customer" | "admin" | "payment_timeout";
+
+// The address saved on the order: as it was when ordered (without the address book's own fields)
+export type ShippingAddress = Omit<Address, "id" | "label" | "isDefault">;
+
+type OrderRow = {
+  id: string;
+  order_number: string;
+  status: OrderStatus;
+  subtotal_amount: number;
+  discount_amount: number;
+  coupon_code: string | null;
+  total_amount: number;
+  created_at: Date;
+  updated_at: Date;
+  shipping_address: ShippingAddress;           // JSONB arrives already parsed
+  cancel_reason: CancelReason | null;
+  refund: { status: string; amount: number; requested_at: string } | null;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+};
+
+type OrderItemRow = {
+  product_id: string | null;                   // NULL once the product is deleted
+  variant_id: string | null;
+  product_name: string;
+  variant_options: VariantOptions;
+  sku: string | null;
+  unit_price: number;
+  quantity: number;
+  line_total: number;
+};
+
+export type OrderItem = {
+  productId: string | null;
+  variantId: string | null;
+  productName: string;
+  options: VariantOptions;
+  optionsLabel: string;
+  sku: string | null;
+  unitPrice: number;
+  quantity: number;
+  lineTotal: number;
+};
+
+type Customer = { id: string; name: string; email: string };
+
+export type Order = {
+  id: string;
+  orderNumber: string;
+  status: OrderStatus;
+  subtotalAmount: number;
+  discountAmount: number;
+  couponCode: string | null;
+  totalAmount: number;
+  createdAt: Date;
+  updatedAt: Date;
+  expiresAt: Date | null;
+  cancelReason: CancelReason | null;
+  refund: { status: string; amount: number; requestedAt: string } | null;
+  shippingAddress: ShippingAddress;
+  customer?: Customer;                         // admins only
+  items: OrderItem[];
+};
 
 // ---------- Reading orders ----------
 
 // Turns the order row + its item rows into the shape the API sends back
-const toOrder = (order, items, { includeCustomer }) => ({
+const toOrder = (order: OrderRow, items: OrderItemRow[], { includeCustomer }: { includeCustomer: boolean }): Order => ({
   id: order.id,
   // What customers see and quote ("ORD-7K3M9Q"); the id is for the API
   orderNumber: order.order_number,
@@ -58,9 +127,9 @@ const toOrder = (order, items, { includeCustomer }) => ({
 
 // Pass userId to only find that user's order (customers);
 // leave it out to find any order (admins), which also adds the customer's details.
-export const getOrderById = async (orderId, { userId } = {}) => {
+export const getOrderById = async (orderId: string, { userId }: { userId?: string } = {}): Promise<Order | undefined> => {
 
-  const values = [orderId];
+  const values: string[] = [orderId];
   let ownerFilter = "";
 
   if (userId !== undefined) {
@@ -68,7 +137,7 @@ export const getOrderById = async (orderId, { userId } = {}) => {
     ownerFilter = "AND o.user_id = $2";
   }
 
-  const { rows: orders } = await pool.query(
+  const { rows: [order] } = await pool.query<OrderRow>(
     `SELECT o.id, o.order_number, o.status, o.subtotal_amount, o.discount_amount, o.coupon_code, o.total_amount,
             o.created_at, o.updated_at, o.shipping_address, o.cancel_reason,
             (SELECT json_build_object('status', r.status, 'amount', r.amount, 'requested_at', r.created_at)
@@ -83,11 +152,11 @@ export const getOrderById = async (orderId, { userId } = {}) => {
     values
   );
 
-  if (orders.length === 0) {
+  if (!order) {
     return undefined;
   }
 
-  const { rows: items } = await pool.query(
+  const { rows: items } = await pool.query<OrderItemRow>(
     `SELECT product_id, variant_id, product_name, variant_options, sku, unit_price, quantity, line_total
      FROM order_items
      WHERE order_id = $1
@@ -95,17 +164,17 @@ export const getOrderById = async (orderId, { userId } = {}) => {
     [orderId]
   );
 
-  return toOrder(orders[0], items, { includeCustomer: userId === undefined });
+  return toOrder(order, items, { includeCustomer: userId === undefined });
 };
 
 // Finds an order by its number ("ORD-7K3M9Q"). Same ownership rule as getOrderById.
-export const getOrderByNumber = async (orderNumber, { userId } = {}) => {
-  const { rows } = await pool.query("SELECT id FROM orders WHERE order_number = $1", [orderNumber]);
-  return rows[0] && getOrderById(rows[0].id, { userId });
+export const getOrderByNumber = async (orderNumber: string, { userId }: { userId?: string } = {}): Promise<Order | undefined> => {
+  const { rows: [found] } = await pool.query<{ id: string }>("SELECT id FROM orders WHERE order_number = $1", [orderNumber]);
+  return found && getOrderById(found.id, { userId });
 };
 
 // Newest first. The id breaks ties between orders placed in the same microsecond.
-const ORDER_SORT = {
+const ORDER_SORT: Sort = {
   name: "orders",
   direction: "desc",
   keys: [
@@ -114,12 +183,38 @@ const ORDER_SORT = {
   ]
 };
 
-// A page of orders, newest first. Same rule: pass userId for one customer's orders only.
-export const listOrders = async ({ userId, status, orderNumber, page, cursor, limit }, { includeCustomer = false } = {}) => {
+type OrderSummaryRow = {
+  id: string;
+  order_number: string;
+  status: OrderStatus;
+  total_amount: number;
+  created_at: Date;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  item_count: number;
+};
 
-  const conditions = [];
-  const values = [];
-  const addValue = (value) => {
+export type OrderSummary = {
+  id: string;
+  orderNumber: string;
+  status: OrderStatus;
+  totalAmount: number;
+  itemCount: number;
+  createdAt: Date;
+  customer?: Customer;
+};
+
+// A page of orders, newest first. Same rule: pass userId for one customer's orders only.
+// The admin query type covers both: customers just never send userId/orderNumber.
+export const listOrders = async (
+  { userId, status, orderNumber, page, cursor, limit }: Partial<AdminOrderListQuery> & Pick<AdminOrderListQuery, "limit">,
+  { includeCustomer = false }: { includeCustomer?: boolean } = {}
+): Promise<{ orders: OrderSummary[]; pagination: Pagination }> => {
+
+  const conditions: string[] = [];
+  const values: unknown[] = [];
+  const addValue = (value: unknown): string => {
     values.push(value);
     return `$${values.length}`;
   };
@@ -145,7 +240,7 @@ export const listOrders = async ({ userId, status, orderNumber, page, cursor, li
   });
 
   return {
-    orders: rows.map((row) => ({
+    orders: (rows as OrderSummaryRow[]).map((row) => ({
       id: row.id,
       orderNumber: row.order_number,
       status: row.status,
@@ -162,27 +257,41 @@ export const listOrders = async ({ userId, status, orderNumber, page, cursor, li
 
 // ---------- Placing an order ----------
 
+type NewOrder = {
+  userId: string;
+  subtotal: number;
+  discount: number;
+  couponCode: string | null;
+  shippingAddress: ShippingAddress;
+};
+
 // Inserts the order with a new random order number. If the number happens to be taken
 // (about 1 in a million per order at 600 orders, rarer with fewer), try another.
 //
 // A failed statement normally ruins the whole transaction ("current transaction is aborted").
 // A SAVEPOINT is a bookmark inside it: ROLLBACK TO SAVEPOINT undoes just the failed insert,
 // and the rest of the checkout (locked cart, checked stock) carries on.
-const insertOrderWithNumber = async (client, { userId, subtotal, discount, couponCode, shippingAddress }) => {
+const insertOrderWithNumber = async (
+  client: PoolClient,
+  { userId, subtotal, discount, couponCode, shippingAddress }: NewOrder
+): Promise<{ id: string; order_number: string }> => {
   for (let attempt = 1; ; attempt++) {
     await client.query("SAVEPOINT order_number");
     try {
-      const { rows: [order] } = await client.query(
+      const { rows: [order] } = await client.query<{ id: string; order_number: string }>(
         `INSERT INTO orders (user_id, subtotal_amount, discount_amount, total_amount, coupon_code, shipping_address, order_number)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id, order_number`,
         [userId, subtotal, discount, subtotal - discount, couponCode, shippingAddress, orderNumbers.next()]
       );
       await client.query("RELEASE SAVEPOINT order_number");
+      if (!order) {
+        throw new Error("Expected the new order row");
+      }
       return order;
     } catch (err) {
       await client.query("ROLLBACK TO SAVEPOINT order_number");
-      const numberTaken = err.code === PG_UNIQUE_VIOLATION && err.constraint === "orders_order_number_key";
+      const numberTaken = isDatabaseError(err) && err.code === PG_UNIQUE_VIOLATION && err.constraint === "orders_order_number_key";
       if (!numberTaken || attempt >= 5) {
         throw err;
       }
@@ -191,9 +300,17 @@ const insertOrderWithNumber = async (client, { userId, subtotal, discount, coupo
   }
 };
 
+const getDefaultAddress = async (client: PoolClient, userId: string): Promise<Address | undefined> => {
+  const { rows: [found] } = await client.query<{ id: string }>(
+    "SELECT id FROM addresses WHERE user_id = $1 AND is_default",
+    [userId]
+  );
+  return found && getAddress(userId, found.id, client);
+};
+
 // Finds the address to ship to: the one the user picked, or else their default.
 // Always filtered by userId, so nobody can ship to (and read) someone else's address.
-const findShippingAddress = async (client, userId, addressId) => {
+const findShippingAddress = async (client: PoolClient, userId: string, addressId: string | undefined): Promise<ShippingAddress> => {
   const address = addressId !== undefined
     ? await getAddress(userId, addressId, client)
     : await getDefaultAddress(client, userId);
@@ -209,17 +326,20 @@ const findShippingAddress = async (client, userId, addressId) => {
   return snapshot;
 };
 
-const getDefaultAddress = async (client, userId) => {
-  const { rows } = await client.query(
-    "SELECT id FROM addresses WHERE user_id = $1 AND is_default",
-    [userId]
-  );
-  return rows[0] && getAddress(userId, rows[0].id, client);
+type CartLineForCheckout = {
+  product_id: string;
+  variant_id: string;
+  quantity: number;
+  name: string;
+  price: number;
+  stock: number;
+  options: VariantOptions;
+  sku: string | null;
 };
 
 // Turns the user's cart into an order. All steps run in ONE transaction:
 // if anything fails (e.g. not enough stock), nothing is saved and the cart stays as it was.
-export const checkout = async (userId, { addressId, couponCode } = {}) => {
+export const checkout = async (userId: string, { addressId, couponCode }: Checkout = {}): Promise<Order | undefined> => {
 
   const orderId = await withTransaction(async (client) => {
 
@@ -234,7 +354,7 @@ export const checkout = async (userId, { addressId, couponCode } = {}) => {
     //    summary row too. So this locks the cart lines, the products AND the variants, all
     //    in one fixed order (product, then variant): two checkouts can never hold locks the
     //    other one is waiting for (no deadlocks).
-    const { rows: cart } = await client.query(
+    const { rows: cart } = await client.query<CartLineForCheckout>(
       `SELECT
          ci.product_id,
          ci.variant_id,
@@ -258,7 +378,7 @@ export const checkout = async (userId, { addressId, couponCode } = {}) => {
     }
 
     // 2. Check stock for every item, and report all problems at once
-    const problems = cart
+    const problems: FieldError[] = cart
       .filter((item) => item.quantity > item.stock)
       .map((item) => {
         const label = optionsLabel(item.options);
@@ -330,8 +450,13 @@ export const checkout = async (userId, { addressId, couponCode } = {}) => {
 
 // Reads the order and LOCKS it until the transaction ends, so two status changes
 // on the same order (e.g. a double-clicked "Cancel") run one after the other.
-const lockOrder = async (client, orderId, userId) => {
-  const values = [orderId];
+// userId?: customers pass theirs (only their own order); admins leave it out (any order).
+const lockOrder = async (
+  client: PoolClient,
+  orderId: string,
+  userId?: string
+): Promise<{ id: string; status: OrderStatus } | undefined> => {
+  const values: string[] = [orderId];
   let ownerFilter = "";
 
   if (userId !== undefined) {
@@ -339,7 +464,7 @@ const lockOrder = async (client, orderId, userId) => {
     ownerFilter = "AND user_id = $2";
   }
 
-  const { rows } = await client.query(
+  const { rows } = await client.query<{ id: string; status: OrderStatus }>(
     `SELECT id, status FROM orders WHERE id = $1 ${ownerFilter} FOR UPDATE`,
     values
   );
@@ -347,9 +472,9 @@ const lockOrder = async (client, orderId, userId) => {
 };
 
 // Puts a cancelled order's items back in stock
-const restoreStock = async (client, orderId) => {
+const restoreStock = async (client: PoolClient, orderId: string): Promise<void> => {
   // Lock the products and variants first, in the same order checkout uses (prevents deadlocks)
-  const { rows: lines } = await client.query(
+  const { rows: lines } = await client.query<{ variant_id: string; quantity: number }>(
     `SELECT v.id AS variant_id, oi.quantity
      FROM order_items oi
      JOIN product_variants v ON v.id = oi.variant_id
@@ -371,8 +496,13 @@ const restoreStock = async (client, orderId) => {
   }
 };
 
-// cancelReason: who/what cancelled it ("customer", "admin" or "payment_timeout")
-const applyStatus = async (client, orderId, newStatus, { cancelReason = null } = {}) => {
+// cancelReason: who/what cancelled it (only stored when the new status is "cancelled")
+const applyStatus = async (
+  client: PoolClient,
+  orderId: string,
+  newStatus: OrderStatus,
+  { cancelReason = null }: { cancelReason?: CancelReason | null } = {}
+): Promise<void> => {
   if (newStatus === "cancelled") {
     await restoreStock(client, orderId);
     // Give the coupon use back (after the stock: products first, then coupons, as at checkout)
@@ -389,7 +519,7 @@ const applyStatus = async (client, orderId, newStatus, { cancelReason = null } =
 };
 
 // A customer cancelling their own order: only while it's still pending
-export const cancelOrder = async (userId, orderId) => {
+export const cancelOrder = async (userId: string, orderId: string): Promise<Order | undefined> => {
 
   await withTransaction(async (client) => {
 
@@ -409,7 +539,7 @@ export const cancelOrder = async (userId, orderId) => {
 };
 
 // An admin moving an order along: pending → paid → shipped → delivered, or cancelling it
-export const changeOrderStatus = async (orderId, newStatus) => {
+export const changeOrderStatus = async (orderId: string, newStatus: OrderStatus): Promise<Order | undefined> => {
 
   const refundId = await withTransaction(async (client) => {
 
@@ -427,7 +557,7 @@ export const changeOrderStatus = async (orderId, newStatus) => {
     // Cancelling an order the customer already paid for: give the money back.
     // (Orders marked "paid" by hand, e.g. cash, have no online payment and get no refund.)
     if (order.status === "paid" && newStatus === "cancelled") {
-      const { rows: [payment] } = await client.query(
+      const { rows: [payment] } = await client.query<{ id: string }>(
         "SELECT id FROM payments WHERE order_id = $1 AND status = 'paid' LIMIT 1",
         [orderId]
       );
@@ -458,13 +588,13 @@ export const changeOrderStatus = async (orderId, newStatus) => {
 //
 // One order per transaction: each order's stock is released as soon as it's done, a
 // problem with one order doesn't undo the others, and locks are held only briefly.
-export const expireUnpaidOrders = async ({ maxOrders = 100 } = {}) => {
+export const expireUnpaidOrders = async ({ maxOrders = 100 }: { maxOrders?: number } = {}): Promise<string[]> => {
 
-  const expired = [];
+  const expired: string[] = [];
 
   while (expired.length < maxOrders) {
     const orderId = await withTransaction(async (client) => {
-      const { rows } = await client.query(
+      const { rows: [order] } = await client.query<{ id: string }>(
         `SELECT id FROM orders
          WHERE status = 'pending'
            AND created_at < NOW() - make_interval(mins => $1)
@@ -474,12 +604,12 @@ export const expireUnpaidOrders = async ({ maxOrders = 100 } = {}) => {
         [env.ORDER_PAYMENT_TIMEOUT_MINUTES]
       );
 
-      if (rows.length === 0) {
+      if (!order) {
         return null;
       }
 
-      await applyStatus(client, rows[0].id, "cancelled", { cancelReason: "payment_timeout" });
-      return rows[0].id;
+      await applyStatus(client, order.id, "cancelled", { cancelReason: "payment_timeout" });
+      return order.id;
     });
 
     if (!orderId) {

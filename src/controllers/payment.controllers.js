@@ -1,5 +1,5 @@
-import * as paymentService from "../services/payment.services.js";
-import * as orderService from "../services/order.services.js";
+import * as paymentService from "../services/payment.services.ts";
+import * as orderService from "../services/order.services.ts";
 
 // POST /orders/:id/payment — step 1: get what the frontend needs to open Razorpay Checkout
 export const startOrderPayment = async (req, res) => {
