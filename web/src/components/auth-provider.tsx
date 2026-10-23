@@ -21,6 +21,8 @@ type AuthContextValue = AuthState & {
   completeTwoFactor: (challengeToken: string, code: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  // Reads the user again (after changing the name, say), so every component shows it
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -77,9 +79,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ status: "guest", user: null });
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const me = await api<{ data: User }>("/auth/me");
+    setState({ status: "signed-in", user: me.data });
+  }, []);
+
   const value = useMemo(
-    () => ({ ...state, login, completeTwoFactor, register, logout }),
-    [state, login, completeTwoFactor, register, logout]
+    () => ({ ...state, login, completeTwoFactor, register, logout, refreshUser }),
+    [state, login, completeTwoFactor, register, logout, refreshUser]
   );
 
   return <AuthContext value={value}>{children}</AuthContext>;

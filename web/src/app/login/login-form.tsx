@@ -1,10 +1,13 @@
 "use client";
 
+import { ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { FormField } from "@/components/form-field";
+import { PasswordField } from "@/components/password-field";
+import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/lib/client-api";
 
 // Only go back to a page on THIS site: "?next=https://evil.example" must not redirect away
@@ -58,12 +61,13 @@ export function LoginForm() {
   if (challengeToken) {
     return (
       <form onSubmit={submitCode} className="flex flex-col gap-4">
-        <p className="text-sm text-zinc-600">Enter the 6-digit code from your authenticator app, or one of your recovery codes.</p>
+        <div className="flex items-start gap-3 rounded-xl bg-brand-soft p-4 text-sm">
+          <ShieldCheck className="size-5 shrink-0 text-brand-text" aria-hidden />
+          <p>Password correct. Now enter the 6-digit code from your authenticator app, or one of your recovery codes.</p>
+        </div>
         <FormField label="Code" name="code" autoComplete="one-time-code" inputMode="numeric" required autoFocus />
-        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-        <button disabled={busy} className="rounded-md bg-zinc-900 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50">
-          {busy ? "Checking…" : "Verify"}
-        </button>
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+        <Button type="submit" size="lg" loading={busy}>{busy ? "Checking…" : "Verify"}</Button>
       </form>
     );
   }
@@ -71,13 +75,11 @@ export function LoginForm() {
   return (
     <form onSubmit={submitPassword} className="flex flex-col gap-4">
       <FormField label="Email" name="email" type="email" autoComplete="email" required />
-      <FormField label="Password" name="password" type="password" autoComplete="current-password" required />
-      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-      <button disabled={busy} className="rounded-md bg-zinc-900 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50">
-        {busy ? "Logging in…" : "Log in"}
-      </button>
-      <p className="text-sm text-zinc-600">
-        New here? <Link href={`/register?next=${encodeURIComponent(next)}`} className="underline">Create an account</Link>
+      <PasswordField label="Password" name="password" autoComplete="current-password" required />
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      <Button type="submit" size="lg" loading={busy}>{busy ? "Logging in…" : "Log in"}</Button>
+      <p className="text-center text-sm text-muted">
+        New here? <Link href={`/register?next=${encodeURIComponent(next)}`} className="font-medium text-brand-text hover:underline">Create an account</Link>
       </p>
     </form>
   );

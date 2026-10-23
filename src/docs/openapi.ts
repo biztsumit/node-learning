@@ -583,6 +583,14 @@ export const openApiDocument = {
         responses: { ...ok("Checkout details", ref("PaymentStart")), ...errors(401, 404, 409, 502, 503) }
       }
     },
+    "/orders/{id}/payment/sync": {
+      parameters: [pathId("id", "Order id")],
+      post: {
+        tags: ["Orders"], summary: "Check the payment with Razorpay directly", ...LOGGED_IN,
+        description: "For when the browser's confirmation (payment/verify) was lost: asks Razorpay whether this order's payment went through, and records it if so. Returns the order (status `paid` if it was). The server also does this by itself every few minutes.",
+        responses: { ...ok("Order", ref("Order")), ...errors(401, 404, 502, 503) }
+      }
+    },
     "/orders/{id}/payment/verify": {
       parameters: [pathId("id", "Order id")],
       post: {

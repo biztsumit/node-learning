@@ -8,7 +8,7 @@
   "license": "ISC",
   "type": "module",
   "scripts": {
-    "dev": "nodemon --ext ts,json src/server.ts",
+    "dev": "nodemon src/server.ts",
     "start": "node src/server.ts",
     "make-admin": "node src/scripts/make-admin.ts",
     "migrate": "node src/db/migrate.ts",

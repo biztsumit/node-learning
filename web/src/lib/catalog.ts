@@ -12,9 +12,18 @@ export type ProductQuery = {
   search?: string;
   category?: string;
   sort?: string;
+  minPrice?: string;
+  maxPrice?: string;
+  inStock?: string;          // "true" to hide sold-out products
   cursor?: string;
   limit?: number;
 };
+
+// Category names are typed by admins ("fashion", "Footwear"): show them consistently, with a
+// capital first letter, everywhere they appear
+const tidy = (name: string): string => name.charAt(0).toUpperCase() + name.slice(1);
+const tidyProduct = <P extends Product>(product: P): P =>
+  product.category ? { ...product, category: { ...product.category, name: tidy(product.category.name) } } : product;
 
 const getJson = async <T>(path: string): Promise<T | null> => {
   const res = await fetch(`${API_URL}${path}`);
@@ -39,7 +48,7 @@ export const getProducts = async (query: ProductQuery): Promise<{ products: Prod
     }
   }
   const body = await getJson<{ data: Product[]; pagination: Pagination }>(`/products?${params}`);
-  return { products: body?.data ?? [], pagination: body?.pagination ?? { limit: 0, nextCursor: null } };
+  return { products: (body?.data ?? []).map(tidyProduct), pagination: body?.pagination ?? { limit: 0, nextCursor: null } };
 };
 
 export const getProductBySlug = async (slug: string): Promise<ProductWithVariants | null> => {
@@ -48,7 +57,7 @@ export const getProductBySlug = async (slug: string): Promise<ProductWithVariant
   cacheTag("products", `product:${slug}`);
 
   const body = await getJson<{ data: ProductWithVariants }>(`/products/slug/${encodeURIComponent(slug)}`);
-  return body?.data ?? null;
+  return body?.data ? tidyProduct(body.data) : null;
 };
 
 export const getCategories = async (): Promise<Category[]> => {
@@ -57,5 +66,5 @@ export const getCategories = async (): Promise<Category[]> => {
   cacheTag("categories");
 
   const body = await getJson<{ data: Category[] }>("/categories");
-  return body?.data ?? [];
+  return (body?.data ?? []).map((c) => ({ ...c, name: tidy(c.name) }));
 };

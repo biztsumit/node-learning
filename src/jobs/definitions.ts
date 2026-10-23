@@ -11,6 +11,7 @@ import { findUserById } from "../services/user.services.ts";
 import { sendEmail } from "../emails/transport.ts";
 import { expireUnpaidOrders, getOrderById } from "../services/order.services.ts";
 import { retryPendingRefunds } from "../services/refund.services.ts";
+import { reconcilePendingPayments } from "../services/payment.services.ts";
 import { refreshSalesReport } from "../services/report.services.ts";
 
 // One job: its queue settings (retries...), an optional schedule, and what it does with its data
@@ -85,13 +86,15 @@ export const JOBS = {
     queue: { policy: "exclusive", retryLimit: 0, expireInSeconds: 10 * 60 },
     schedule: "* * * * *",
     run: async () => {
+      // Payments first: an order paid at Razorpay must never be cancelled as "unpaid"
+      const reconciledPayments = await reconcilePendingPayments();
       const cancelled = await expireUnpaidOrders();
       const deletedKeys = await deleteOldIdempotencyKeys();
       const retriedRefunds = await retryPendingRefunds();
       const deletedTokens = await deleteDeadTokens() + await deleteDeadSessions();
-      if (cancelled.length > 0 || deletedKeys > 0 || retriedRefunds > 0 || deletedTokens > 0) {
+      if (reconciledPayments > 0 || cancelled.length > 0 || deletedKeys > 0 || retriedRefunds > 0 || deletedTokens > 0) {
         logger.info(
-          { cancelledOrders: cancelled.length, deletedIdempotencyKeys: deletedKeys, retriedRefunds, deletedAuthTokens: deletedTokens },
+          { reconciledPayments, cancelledOrders: cancelled.length, deletedIdempotencyKeys: deletedKeys, retriedRefunds, deletedAuthTokens: deletedTokens },
           "Maintenance finished"
         );
       }

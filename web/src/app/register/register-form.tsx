@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { FormField } from "@/components/form-field";
+import { PasswordField } from "@/components/password-field";
+import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/lib/client-api";
 
 const safeNext = (next: string | null): string => (next?.startsWith("/") && !next.startsWith("//") ? next : "/");
@@ -42,13 +44,11 @@ export function RegisterForm() {
     <form onSubmit={submit} className="flex flex-col gap-4">
       <FormField label="Name" name="name" autoComplete="name" required error={fieldErrors.name} />
       <FormField label="Email" name="email" type="email" autoComplete="email" required error={fieldErrors.email} />
-      <FormField label="Password" name="password" type="password" autoComplete="new-password" minLength={6} required error={fieldErrors.password} />
-      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-      <button disabled={busy} className="rounded-md bg-zinc-900 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50">
-        {busy ? "Creating your account…" : "Create account"}
-      </button>
-      <p className="text-sm text-zinc-600">
-        Already have an account? <Link href={`/login?next=${encodeURIComponent(next)}`} className="underline">Log in</Link>
+      <PasswordField label="Password" name="password" autoComplete="new-password" minLength={6} required hint="At least 6 characters" error={fieldErrors.password} />
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      <Button type="submit" size="lg" loading={busy}>{busy ? "Creating your account…" : "Create account"}</Button>
+      <p className="text-center text-sm text-muted">
+        Already have an account? <Link href={`/login?next=${encodeURIComponent(next)}`} className="font-medium text-brand-text hover:underline">Log in</Link>
       </p>
     </form>
   );

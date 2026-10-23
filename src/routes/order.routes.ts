@@ -6,7 +6,7 @@ import {
   getMyOrderByNumber,
   cancelMyOrder
 } from "../controllers/order.controllers.ts";
-import { startOrderPayment, verifyOrderPayment } from "../controllers/payment.controllers.ts";
+import { startOrderPayment, syncOrderPayment, verifyOrderPayment } from "../controllers/payment.controllers.ts";
 import { requireAuth } from "../middlewares/auth.middleware.ts";
 import { idempotency } from "../middlewares/idempotency.middleware.ts";
 import { requirePaymentsEnabled } from "../middlewares/payments.middleware.ts";
@@ -30,5 +30,7 @@ router.post("/:id/cancel", validate({ params: idParamSchema }), cancelMyOrder);
 // Paying for an order with Razorpay
 router.post("/:id/payment", requirePaymentsEnabled, validate({ params: idParamSchema }), startOrderPayment);
 router.post("/:id/payment/verify", requirePaymentsEnabled, validate({ params: idParamSchema, body: verifyPaymentSchema }), verifyOrderPayment);
+// If the browser's confirmation was lost: ask Razorpay what happened
+router.post("/:id/payment/sync", requirePaymentsEnabled, validate({ params: idParamSchema }), syncOrderPayment);
 
 export default router;

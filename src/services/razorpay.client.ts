@@ -23,7 +23,14 @@ const razorpayRefundSchema = z.object({
   status: z.string()      // "pending" | "processed" | "failed"
 });
 
+const razorpayPaymentSchema = z.object({
+  id: z.string(),
+  amount: z.number(),
+  status: z.string()      // "created" | "authorized" | "captured" | "refunded" | "failed"
+});
+
 export type RazorpayOrder = z.infer<typeof razorpayOrderSchema>;
+export type RazorpayPayment = z.infer<typeof razorpayPaymentSchema>;
 export type RazorpayRefund = z.infer<typeof razorpayRefundSchema>;
 
 // Payments are optional (the app runs without them: payment routes answer 503), so these
@@ -97,6 +104,13 @@ export const listRefunds = async (paymentId: string): Promise<RazorpayRefund[]> 
   (await razorpayRequest(
     "GET", `/payments/${encodeURIComponent(paymentId)}/refunds`, undefined, "refund lookup",
     z.object({ items: z.array(razorpayRefundSchema).default([]) })
+  )).items;
+
+// Every payment attempt for one of our Razorpay orders (to check what really happened)
+export const listOrderPayments = async (razorpayOrderId: string): Promise<RazorpayPayment[]> =>
+  (await razorpayRequest(
+    "GET", `/orders/${encodeURIComponent(razorpayOrderId)}/payments`, undefined, "payment lookup",
+    z.object({ items: z.array(razorpayPaymentSchema).default([]) })
   )).items;
 
 const hmacSha256Hex = (secret: string, data: string | Buffer): string =>

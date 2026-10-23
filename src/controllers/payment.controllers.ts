@@ -32,6 +32,19 @@ export const verifyOrderPayment = async (req: Checked<IdParam, VerifyPayment>, r
   });
 };
 
+// POST /orders/:id/payment/sync — "I paid but it still says pending": ask Razorpay directly
+export const syncOrderPayment = async (req: Checked<IdParam>, res: Response): Promise<void> => {
+
+  const { id: userId } = currentUser(req);
+  await paymentService.syncOrderPayment(userId, req.params.id);
+  const order = await orderService.getOrderById(req.params.id, { userId });
+
+  res.json({
+    success: true,
+    data: order
+  });
+};
+
 // POST /webhooks/razorpay — Razorpay's server calls this; req.body is the raw bytes here
 // (express.raw in the webhook route), because the signature covers those exact bytes
 export const razorpayWebhook = async (req: Request, res: Response): Promise<void> => {

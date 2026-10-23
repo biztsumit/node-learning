@@ -11,6 +11,9 @@ export const setAccessToken = (token: string | null): void => {
   accessToken = token;
 };
 
+// For the one place that must hand the token to our own Next server (a Server Action)
+export const getAccessToken = (): string | null => accessToken;
+
 // An API error with the details the server sent (e.g. which form field was wrong)
 export class ApiRequestError extends Error {
   status: number;

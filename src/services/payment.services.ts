@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { env } from "../config/env.ts";
+import pool from "../config/db.ts";
+import { env, paymentsEnabled } from "../config/env.ts";
 import { logger } from "../config/logger.ts";
 import { withTransaction, type TransactionClient } from "../db/transaction.ts";
 import { AppError } from "../utils/app-error.ts";
@@ -219,6 +220,88 @@ export const confirmPayment = async (
     }
     throw new AppError(409, "This order was cancelled before the payment completed. The payment is being refunded");
   }
+};
+
+// ---------- Reconciliation: asking Razorpay what really happened ----------
+
+// The browser's "payment done" (above) and Razorpay's webhook (below) can BOTH be lost: the tab
+// closed, our server restarted mid-request, or no webhook is set up (local development). Then
+// the customer has paid but the order still says "pending". So we can also ask Razorpay
+// directly: "was this payment request paid?". Captured = the money is ours.
+export const syncPayment = async (providerOrderId: string): Promise<PaymentOutcome | null> => {
+  const payments = await razorpay.listOrderPayments(providerOrderId);
+  await pool.query("UPDATE payments SET checked_at = NOW() WHERE provider_order_id = $1", [providerOrderId]);
+
+  const captured = payments.find((payment) => payment.status === "captured");
+  if (!captured) {
+    return null;
+  }
+  // The same safe path as the browser and the webhook: recording twice changes nothing
+  const outcome = await withTransaction((client) =>
+    recordSuccessfulPayment(client, { providerOrderId, providerPaymentId: captured.id, amount: captured.amount })
+  );
+  if (outcome.result === "needs_refund" && outcome.refundId) {
+    await processRefund(outcome.refundId);
+  }
+  logger.info({ providerOrderId, providerPaymentId: captured.id, result: outcome.result }, "Payment reconciled with Razorpay");
+  return outcome;
+};
+
+// POST /orders/:id/payment/sync: "I paid, why does it still say pending?" Returns the order's
+// status after checking every unconfirmed payment request of this (the user's own) order.
+export const syncOrderPayment = async (userId: string, orderId: string): Promise<{ status: string }> => {
+  const { rows: [order] } = await pool.query<{ status: string }>(
+    "SELECT status FROM orders WHERE id = $1 AND user_id = $2",
+    [orderId, userId]
+  );
+  if (!order) {
+    throw new AppError(404, "Order not found");
+  }
+  const { rows: pending } = await pool.query<{ provider_order_id: string }>(
+    "SELECT provider_order_id FROM payments WHERE order_id = $1 AND status = 'created' ORDER BY created_at DESC",
+    [orderId]
+  );
+  try {
+    for (const { provider_order_id } of pending) {
+      await syncPayment(provider_order_id);
+    }
+  } catch (err) {
+    logger.error({ err, orderId }, "Could not check the payment with Razorpay");
+    throw new AppError(502, "Could not reach the payment provider. Please try again in a moment");
+  }
+  const { rows: [after] } = await pool.query<{ status: string }>("SELECT status FROM orders WHERE id = $1", [orderId]);
+  return { status: after?.status ?? order.status };
+};
+
+// The maintenance job (every minute): unconfirmed payment requests of still-pending orders.
+// Waits 2 minutes (the customer may still be in Razorpay's window), then checks each one at
+// most every 10 minutes. Returns how many turned out to be paid.
+export const reconcilePendingPayments = async ({ max = 20 }: { max?: number } = {}): Promise<number> => {
+  if (!paymentsEnabled) {
+    return 0;
+  }
+  const { rows } = await pool.query<{ provider_order_id: string }>(
+    `SELECT p.provider_order_id
+     FROM payments p JOIN orders o ON o.id = p.order_id
+     WHERE p.status = 'created' AND o.status = 'pending'
+       AND p.created_at < NOW() - INTERVAL '2 minutes'
+       AND (p.checked_at IS NULL OR p.checked_at < NOW() - INTERVAL '10 minutes')
+     ORDER BY p.checked_at NULLS FIRST, p.created_at
+     LIMIT $1`,
+    [max]
+  );
+  let paid = 0;
+  for (const { provider_order_id } of rows) {
+    try {
+      if ((await syncPayment(provider_order_id))?.result === "paid") {
+        paid++;
+      }
+    } catch (err) {
+      // Razorpay unreachable: try again on a later run
+      logger.warn({ err, providerOrderId: provider_order_id }, "Payment reconciliation failed; will retry");
+    }
+  }
+  return paid;
 };
 
 // ---------- Webhooks: Razorpay's server tells our server what happened ----------

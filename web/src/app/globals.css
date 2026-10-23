@@ -1,19 +1,134 @@
 @import "tailwindcss";
 
+/* ---------- Design tokens ----------
+   Every colour the site uses has a NAME by its job (surface, muted text, brand...), defined
+   once here. Components say "bg-surface text-muted", never "bg-white text-zinc-500", so:
+   - the whole look changes by editing this file only
+   - dark mode is just a second set of values for the same names (below)
+*/
 :root {
-  --background: #fafafa;
-  --foreground: #18181b;
+  color-scheme: light dark;   /* native inputs, scrollbars and date pickers follow the theme */
+
+  --bg: #f7f7fa;              /* page background */
+  --surface: #ffffff;         /* cards, header, inputs */
+  --subtle: #f1f1f5;          /* hover rows, image placeholders, skeletons */
+  --line: #e4e4ea;            /* borders and dividers */
+  --line-strong: #cdcdd8;     /* input borders */
+
+  --fg: #16161d;              /* main text */
+  --muted: #5b5b6b;           /* secondary text (6.6:1 on white) */
+  --faint: #8b8b9a;           /* placeholders, decorative text only */
+
+  --brand: #4f46e5;           /* buttons, active states (white text on it: 6.3:1) */
+  --brand-hover: #4338ca;
+  --brand-fg: #ffffff;        /* text ON the brand colour */
+  --brand-soft: #eef0ff;      /* tinted backgrounds */
+  --brand-text: #4338ca;      /* brand-coloured text and links */
+
+  --success: #15803d;  --success-soft: #ecfdf3;
+  --warning: #b45309;  --warning-soft: #fff8eb;
+  --danger: #c81e1e;   --danger-soft: #fef2f2;
+  --info: #0369a1;     --info-soft: #eef8ff;
+
+  --chart: #2a78d6;           /* dashboard series (validated: contrast + colour-blind safe) */
+  --chart-track: #cde2fb;
+  --star: #f59e0b;            /* rating stars (decorative: the number is always shown too) */
+
+  --shadow-color: 240 20% 20%;
 }
 
+/* Dark mode: the SAME names, values chosen for a dark background (not an automatic invert:
+   text is softened, the brand text is lighter so it stays readable, shadows get stronger) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d0d12;
+    --surface: #16161d;
+    --subtle: #1f1f28;
+    --line: #2a2a35;
+    --line-strong: #3b3b49;
+
+    --fg: #ececf2;
+    --muted: #a5a5b4;
+    --faint: #6f6f82;
+
+    --brand: #4f46e5;
+    --brand-hover: #5b53f0;
+    --brand-fg: #ffffff;
+    --brand-soft: #1d1b45;
+    --brand-text: #a5b0ff;
+
+    --success: #4ade80;  --success-soft: #0f2a1b;
+    --warning: #fbbf24;  --warning-soft: #2b2110;
+    --danger: #f87171;   --danger-soft: #2d1416;
+    --info: #7dd3fc;     --info-soft: #0c2533;
+
+    --chart: #3987e5;
+    --chart-track: #184f95;
+    --star: #fbbf24;
+
+    --shadow-color: 0 0% 0%;
+  }
+}
+
+/* Tell Tailwind about the tokens: "bg-surface", "text-muted", "border-line", "bg-brand/10"... */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-subtle: var(--subtle);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-fg: var(--brand-fg);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-text: var(--brand-text);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-chart: var(--chart);
+  --color-chart-track: var(--chart-track);
+  --color-star: var(--star);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Soft, layered shadows (a tight one for the edge + a wide faint one for depth) */
+  --shadow-card: 0 1px 2px hsl(var(--shadow-color) / 0.06), 0 4px 16px -4px hsl(var(--shadow-color) / 0.08);
+  --shadow-pop: 0 2px 6px hsl(var(--shadow-color) / 0.1), 0 16px 40px -8px hsl(var(--shadow-color) / 0.25);
+
+  --animate-toast-in: toast-in 0.2s ease-out;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--fg);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* One consistent, clearly visible keyboard focus ring everywhere (mouse clicks don't show it) */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* People who turn on "reduce motion" in their OS get no animations or smooth movement */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
